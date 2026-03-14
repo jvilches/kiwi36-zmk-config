@@ -12,7 +12,7 @@
     "type=volume,source=zmk-zephyr-modules,target=/workspaces/zmk/modules",
     "type=volume,source=zmk-zephyr-tools,target=/workspaces/zmk/tools"
   ],
-  "postCreateCommand": "west init -l ${containerWorkspaceFolder}/config && west update",
+  "postCreateCommand": "[ -d .west ] || west init -l config && west update",
   "customizations": {
     "vscode": {
       "extensions": ["ms-vscode.cpptools"],
