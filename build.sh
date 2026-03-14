@@ -48,7 +48,7 @@ ensure_dongle_modules() {
         return 0
     fi
     echo "--- Fetching dongle modules ---"
-    west config manifest.group-filter +dongle
+    west config manifest.group-filter -- +dongle
     west update prospector-zmk-module zmk-dongle-screen
 }
 
