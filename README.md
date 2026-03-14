@@ -36,7 +36,7 @@ All dependencies are declared in `config/west.yml` and fetched automatically by 
 
 | Dependency | Repository | Version |
 |---|---|---|
-| ZMK firmware | [zmkfirmware/zmk](https://github.com/zmkfirmware/zmk) | `v3.5.0+zmk-fixes` |
+| ZMK firmware | [zmkfirmware/zmk](https://github.com/zmkfirmware/zmk) | `main` |
 | prospector-zmk-module | [carrefinho/prospector-zmk-module](https://github.com/carrefinho/prospector-zmk-module) | `main` |
 | zmk-dongle-screen | [janpfischer/zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | `main` |
 
