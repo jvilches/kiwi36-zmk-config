@@ -30,6 +30,25 @@ ZMK firmware configuration for the [Kiwi36](https://github.com/klouderone/zmk-co
 - [Docker](https://www.docker.com/products/docker-desktop)
 - [VSCode](https://code.visualstudio.com) with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
 
+### Dependencies
+
+All dependencies are declared in `config/west.yml` and fetched automatically by `west update`. You do not need to clone anything manually.
+
+| Dependency | Repository | Version |
+|---|---|---|
+| ZMK firmware | [zmkfirmware/zmk](https://github.com/zmkfirmware/zmk) | `v3.5.0+zmk-fixes` |
+| prospector-zmk-module | [carrefinho/prospector-zmk-module](https://github.com/carrefinho/prospector-zmk-module) | `main` |
+| zmk-dongle-screen | [janpfischer/zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | `main` |
+
+After `west update`, the modules are cloned into the repo root alongside the `config/` directory:
+```
+zmk-config/
+├── config/               ← this repo
+├── zmk/                  ← fetched by west
+├── prospector-zmk-module/← fetched by west
+└── zmk-dongle-screen/    ← fetched by west
+```
+
 ### First-time setup
 
 1. Clone this repo and open it in VSCode:
@@ -40,7 +59,7 @@ ZMK firmware configuration for the [Kiwi36](https://github.com/klouderone/zmk-co
 
 2. VSCode will detect `.devcontainer/devcontainer.json` and prompt **"Reopen in Container"** — click it.
 
-3. The container starts and runs `west init && west update` automatically. This downloads ZMK and all dependencies into Docker volumes. **This only happens once** — subsequent opens reuse the cached volumes.
+3. The container starts and runs `west init && west update` automatically. This fetches ZMK, the two modules, and all Zephyr toolchain dependencies into Docker volumes. **This only happens once** — subsequent opens reuse the cached volumes.
 
 ### Build all variants
 
@@ -89,7 +108,9 @@ Home row mods (left: GUI/ALT/CTL/SFT, right: SFT/CTL/ALT/GUI) use a 180 ms tappi
 
 ## Modules
 
-| Module | Source | Used for |
-|---|---|---|
-| [prospector-zmk-module](https://github.com/carrefinho/prospector-zmk-module) | carrefinho | Ambient light sensor on dongle |
-| [zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | janpfischer | YADS dongle screen support |
+Both modules are required to build the dongle variants. They are fetched automatically via `west update` — see [Dependencies](#dependencies) above.
+
+| Module | Used for |
+|---|---|
+| [prospector-zmk-module](https://github.com/carrefinho/prospector-zmk-module) | Ambient light sensor support on the dongle |
+| [zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | YADS dongle screen support |
