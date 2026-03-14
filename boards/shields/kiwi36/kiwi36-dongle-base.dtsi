@@ -1,10 +1,19 @@
+/*
+ * Copyright (c) 2020 The ZMK Contributors
+ * SPDX-License-Identifier: MIT
+ */
+
 #include <dt-bindings/zmk/matrix_transform.h>
 #include "kiwi36-layouts.dtsi"
 
+&physical_layout0 {
+    transform = <&default_transform>;
+};
+
 / {
     chosen {
+        zmk,kscan = &mock_kscan;
         zmk,physical-layout = &physical_layout0;
-        zmk,kscan = &kscan;
     };
 
     default_transform: matrix_transform {
@@ -25,15 +34,10 @@
         >;
     };
 
-    kscan: kscan {
-        compatible = "zmk,kscan-gpio-matrix";
-        diode-direction = "col2row";
-        wakeup-source;
-
-        row-gpios
-            = <&pro_micro 4 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
-              <&pro_micro 5 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
-              <&pro_micro 6 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
-              <&pro_micro 7 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+    mock_kscan: kscan0 {
+        compatible = "zmk,kscan-mock";
+        columns = <0>;
+        rows = <0>;
+        events = <0>;
     };
 };

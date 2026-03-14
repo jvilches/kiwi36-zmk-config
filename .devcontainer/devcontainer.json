@@ -1,0 +1,24 @@
+{
+  "name": "ZMK Config",
+  "image": "zmkfirmware/zmk-dev-arm:3.5",
+  "runArgs": ["--security-opt", "label=disable"],
+  "containerEnv": {
+    "ZMK_CONFIG": "${containerWorkspaceFolder}/config",
+    "PROMPT_COMMAND": "history -a"
+  },
+  "mounts": [
+    "type=volume,source=zmk-root-user,target=/root",
+    "type=volume,source=zmk-zephyr,target=/workspaces/zmk/zephyr",
+    "type=volume,source=zmk-zephyr-modules,target=/workspaces/zmk/modules",
+    "type=volume,source=zmk-zephyr-tools,target=/workspaces/zmk/tools"
+  ],
+  "postCreateCommand": "west init -l ${containerWorkspaceFolder}/config && west update",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-vscode.cpptools"],
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash"
+      }
+    }
+  }
+}

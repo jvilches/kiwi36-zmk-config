@@ -27,20 +27,10 @@ config BT_MAX_PAIRED
 endif
 
 
-if SHIELD_KIWI36
-
-endif
-
-
 if SHIELD_KIWI36_LEFT
 
 config ZMK_SPLIT_ROLE_CENTRAL
     default y
-
-endif
-
-
-if SHIELD_KIWI36_RIGHT
 
 endif
 
