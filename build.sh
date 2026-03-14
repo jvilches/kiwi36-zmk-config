@@ -4,12 +4,12 @@
 
 set -e
 
-ZMK_APP_PATH="/workspaces/zmk/app"
-CONFIG_PATH="/workspaces/zmk-config/config"
-MODULES_PATH="/workspaces/zmk-config"
-PROSPECTOR_MODULE_PATH="/workspaces/zmk-config/prospector-zmk-module"
-YADS_MODULE_PATH="/workspaces/zmk-config/zmk-dongle-screen"
-OUTPUT_DIR="/workspaces/zmk-config/output"
+ZMK_APP_PATH="$(west list zmk -f '{abspath}')/app"
+CONFIG_PATH="$(west list config -f '{abspath}')"
+MODULES_PATH="$(dirname "$CONFIG_PATH")"
+PROSPECTOR_MODULE_PATH="$(west list prospector-zmk-module -f '{abspath}')"
+YADS_MODULE_PATH="$(west list zmk-dongle-screen -f '{abspath}')"
+OUTPUT_DIR="$MODULES_PATH/output"
 BOARD="nice_nano_v2"
 DONGLE_BOARD="nice_nano_v2"
 

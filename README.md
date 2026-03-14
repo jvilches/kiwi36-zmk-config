@@ -74,16 +74,20 @@ Output `.uf2` files are written to `output/`.
 ### Build a single variant manually
 
 ```bash
+ZMK=$(west list zmk -f '{abspath}')
+CONFIG=$(west list config -f '{abspath}')
+MODULES=$(dirname "$CONFIG")
+
 # Left half
-west build -p -s /workspaces/zmk/app -d build/kiwi36_left -b nice_nano_v2 -- \
+west build -p -s "$ZMK/app" -d build/kiwi36_left -b nice_nano_v2 -- \
   -DSHIELD="kiwi36_left nice_view_adapter nice_view" \
-  -DZMK_CONFIG="$ZMK_CONFIG" \
-  -DZMK_EXTRA_MODULES="/workspaces/zmk-config"
+  -DZMK_CONFIG="$CONFIG" \
+  -DZMK_EXTRA_MODULES="$MODULES"
 
 # USB dongle (no screen)
-west build -p -s /workspaces/zmk/app -d build/kiwi36_dongle -b nice_nano_v2 -- \
+west build -p -s "$ZMK/app" -d build/kiwi36_dongle -b nice_nano_v2 -- \
   -DSHIELD="kiwi36_dongle" \
-  -DZMK_EXTRA_MODULES="/workspaces/zmk-config;/workspaces/zmk-config/prospector-zmk-module"
+  -DZMK_EXTRA_MODULES="$MODULES;$(west list prospector-zmk-module -f '{abspath}')"
 ```
 
 ### Flashing
