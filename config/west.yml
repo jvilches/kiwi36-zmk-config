@@ -1,0 +1,21 @@
+manifest:
+  remotes:
+    - name: zmkfirmware
+      url-base: https://github.com/zmkfirmware
+    - name: carrefinho
+      url-base: https://github.com/carrefinho
+    - name: janpfischer
+      url-base: https://github.com/janpfischer
+  projects:
+    - name: zmk
+      remote: zmkfirmware
+      revision: v3.5.0+zmk-fixes
+      import: app/west.yml
+    - name: prospector-zmk-module
+      remote: carrefinho
+      revision: main
+    - name: zmk-dongle-screen
+      remote: janpfischer
+      revision: main
+  self:
+    path: config

@@ -1,0 +1,184 @@
+/*
+ * Copyright (c) 2023 The ZMK Contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/keys.h>
+#include <dt-bindings/zmk/bt.h>
+#include <dt-bindings/zmk/outputs.h>
+#include <dt-bindings/zmk/rgb.h>
+
+nice_view_spi: &spi0 {
+  cs-gpios = <&gpio0 31 GPIO_ACTIVE_HIGH>;
+};
+
+#define BASE 0
+#define FUN 1
+#define NAV 2
+#define MED 3
+#define NUM 4
+#define SYM 5
+#define TAP 6
+
+/* --- MACROS FOR MAC SHORTCUTS --- */
+#define U_RDO LG(LS(Z))
+#define U_PST LG(V)
+#define U_CPY LG(C)
+#define U_CUT LG(X)
+#define U_UND LG(Z)
+
+/ {
+    behaviors {
+        /* Home Row Mods: Tap for key, Hold for Mod */
+        hm: homerow_mods {
+            compatible = "zmk,behavior-hold-tap";
+            #binding-cells = <2>;
+            tapping-term-ms = <180>;
+            quick-tap-ms = <175>;
+            flavor = "balanced";
+            bindings = <&kp>, <&kp>;
+        };
+
+        /* Thumb Layer Taps */
+        lt_q: layer_tap_quick {
+            compatible = "zmk,behavior-hold-tap";
+            #binding-cells = <2>;
+            tapping-term-ms = <200>;
+            quick-tap-ms = <175>;
+            flavor = "tap-preferred";
+            bindings = <&mo>, <&kp>;
+        };
+
+        /* Tap Dance: Double tap to Reset */
+        td_boot: tap_dance_boot {
+            compatible = "zmk,behavior-tap-dance";
+            #binding-cells = <0>;
+            tapping-term-ms = <200>;
+            bindings = <&none>, <&sys_reset>;
+        };
+    };
+
+    keymap {
+        compatible = "zmk,keymap";
+
+// LAYER 0: BASE
+// -----------------------------------------------------------------------------------
+// |   Q   |   W   |    E  |   R   |   T   |   |   Y   |   U   |   I   |   O   |   P   |
+// | A/GUI | S/ALT | D/CTL | F/SFT |   G   |   |   H   | J/SFT | K/CTL | L/ALT | '/GUI |
+// |   Z   |    X  |    C  |   V   |   B   |   |   N   |   M   |   ,   |   .   |   /   |
+//                 |MED/ESC|NAV/SPC|FUN/TAB|   |SYM/RET|NUM/BSP|FUN/DEL|
+
+        default_layer {
+            display-name = "BASE";
+            bindings = <
+    &kp Q       &kp W       &kp E       &kp R       &kp T          &kp Y       &kp U       &kp I       &kp O       &kp P
+    &hm LGUI A  &hm LALT S  &hm LCTRL D &hm LSHFT F &kp G          &kp H       &hm RSHFT J &hm RCTRL K &hm RALT L  &hm RGUI SQT
+    &kp Z       &kp X       &kp C       &kp V       &kp B          &kp N       &kp M       &kp COMMA   &kp DOT     &kp FSLH
+                            &lt MED ESC &lt NAV SPACE &lt FUN TAB  &lt SYM RET &lt NUM BSPC &lt FUN DEL
+            >;
+        };
+
+// LAYER 1: FUNCTION
+// -----------------------------------------------------------------
+// | F12 | F7  | F8  | F9  | PSC |   |     | BASE| TAP |     | BOOT|
+// | F11 | F4  | F5  | F6  | SLC |   |     | RSFT| RCTL| RALT| RGUI|
+// | F10 | F1  | F2  | F3  | PAU |   |     | FUN | MED | RALT|     |
+//             | APP | SPC | TAB |   |     |     |     |
+ 
+        function_layer {
+            display-name = "FUN";
+            bindings = <
+    &kp F12     &kp F7      &kp F8      &kp F9      &kp PSCRN      &none       &to BASE    &to TAP     &none       &td_boot
+    &kp F11     &kp F4      &kp F5      &kp F6      &kp SLCK       &none       &kp RSHFT   &kp RCTRL   &kp RALT    &kp RGUI
+    &kp F10     &kp F1      &kp F2      &kp F3      &kp PAUSE_BREAK &none      &to FUN     &to MED     &kp RALT    &none
+                            &kp K_APP   &kp SPACE   &kp TAB        &none       &none       &trans
+            >;
+        };
+
+// LAYER 2: NAVIGATION
+// -----------------------------------------------------------------
+// | BOOT| TAP |     | BASE|     |   | REDO| PST | CPY | CUT | UNDO|
+// | LGUI| LALT| LCTL| LSFT|     |   | CAPS| LEFT| DOWN| UP  | RGHT|
+// |     | RALT| NUM | NAV |     |   | INS | HOME| PGDN| PGUP| END |
+//             |     |     |     |   | RET | BSPC| DEL | 
+
+        nav_layer {
+            display-name = "NAV";
+            bindings = <
+    &td_boot    &to TAP     &none       &to BASE    &none          &kp U_RDO   &kp U_PST   &kp U_CPY   &kp U_CUT   &kp U_UND
+    &kp LGUI    &kp LALT    &kp LCTRL   &kp LSHFT   &none          &caps_word  &kp LEFT    &kp DOWN    &kp UP      &kp RIGHT
+    &none       &kp RALT    &to NUM     &to NAV     &none          &kp INS     &kp HOME    &kp PG_DN   &kp PG_UP   &kp END
+                            &none       &trans      &none          &kp RET     &kp BSPC    &kp DEL
+            >;
+        };
+
+// LAYER 3: MEDIA
+// --------------------------------------------------------------------
+// | BOOT| TAP |     | BASE| BT_CLR |   |      | BT_P |      |     | BT_N |
+// | LGUI| LALT| LCTL| LSFT|        |   |      | PREV | VOLD | VOLU| NEXT|
+// |     | RALT| FUN | MED |        |   | AUTO |      |      |     |     |
+//             |     |     |        |   | STOP | PLAY | MUTE |
+
+        media_layer {
+            display-name = "MEDIA";
+            bindings = <
+    &td_boot    &to TAP     &none       &to BASE    &bt BT_CLR     &none             &bt BT_PRV          &none            &none             &bt BT_NXT
+    &kp LGUI    &kp LALT    &kp LCTRL   &kp LSHFT   &none          &none             &kp C_PREV          &kp C_VOL_DN     &kp C_VOL_UP      &kp C_NEXT
+    &none       &kp RALT    &to FUN     &to MED     &none          &none             &none               &none            &none             &none
+                            &trans      &none       &none          &kp C_STOP        &kp C_PLAY          &kp C_MUTE
+            >;
+        };
+
+// LAYER 4: NUMERAL
+// -----------------------------------------------------------------
+// |  [  |  7  |  8  |  9  |  ]  |   |     | BASE| TAP |     | BOOT|
+// |  ;  |  4  |  5  |  6  |  =  |   |     | RSFT| RCTL| RALT| RGUI|
+// |  `  |  1  |  2  |  3  |  \  |   |     | NUM | NAV | RALT|     |
+//             |  .  |  0  |  -  |   |     |     |     |
+
+        numeral_layer {
+            display-name = "NUM";
+            bindings = <
+    &kp LBKT    &kp N7      &kp N8      &kp N9      &kp RBKT       &none       &to BASE    &to TAP     &none       &td_boot
+    &kp SEMI    &kp N4      &kp N5      &kp N6      &kp EQUAL      &none       &kp RSHFT   &kp RCTRL   &kp RALT    &kp RGUI
+    &kp GRAVE   &kp N1      &kp N2      &kp N3      &kp BSLH       &none       &to NUM     &to NAV     &kp RALT    &none
+                            &kp DOT     &kp N0      &kp MINUS      &none       &trans      &none
+            >;
+        };
+
+// LAYER 5: SYMBOLS
+// -----------------------------------------------------------------
+// |  {  |  &  |  *  |  (  |  }  |   |     | BASE| TAP |     | BOOT|
+// |  :  |  $  |  %  |  ^  |  +  |   |     | RSFT| RCTL| RALT| RGUI|
+// |  ~  |  !  |  @  |  #  |  |  |   |     | SYM |     | RALT|     |
+//             |  (  |  )  |  _  |   |     |     |     |
+
+        symbols_layer {
+            display-name = "SYM";
+            bindings = <
+    &kp LBRC    &kp AMPS    &kp STAR    &kp LPAR    &kp RBRC       &none       &to BASE    &to TAP     &none       &td_boot
+    &kp COLON   &kp DLLR    &kp PRCNT   &kp CARET   &kp PLUS       &none       &kp RSHFT   &kp RCTRL   &kp RALT    &kp RGUI
+    &kp TILDE   &kp EXCL    &kp AT      &kp HASH    &kp PIPE       &none       &to SYM     &none       &kp RALT    &none
+                            &kp LPAR    &kp RPAR    &kp UNDER      &trans      &none       &none
+            >;
+        };
+
+// LAYER 6: TAP (Gaming / No Mods)
+// ------------------------------------------------------------------
+// |  Q  |  W  |  E  |  R  |  T  |   |  Y  |  U   |  I  |  O  |  P  |
+// |  A  |  S  |  D  |  F  |  G  |   |  H  |  J   |  K  |  L  |  '  |
+// |  Z  |  X  |  C  |  V  |  B  |   |  N  |  M   |  ,  |  .  |  /  |
+//             | ESC | SPC | TAB |   | RET | BSPC | DEL |
+
+        tap_layer {
+            display-name = "TAP";
+            bindings = <
+    &kp Q       &kp W       &kp E       &kp R       &kp T          &kp Y       &kp U       &kp I       &kp O       &kp P
+    &kp A       &kp S       &kp D       &kp F       &kp G          &kp H       &kp J       &kp K       &kp L       &kp SQT
+    &kp Z       &kp X       &kp C       &kp V       &kp B          &kp N       &kp M       &kp COMMA   &kp DOT     &kp FSLH
+                            &kp ESC     &kp SPACE   &kp TAB        &kp RET     &kp BSPC    &kp DEL
+            >;
+        };
+    };
+};
