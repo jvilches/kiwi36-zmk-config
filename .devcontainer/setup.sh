@@ -20,4 +20,7 @@ west config manifest.group-filter -- -dongle
 echo "--- west update ---"
 west update
 
+echo "--- west zephyr-export ---"
+west zephyr-export
+
 echo "=== Setup complete ==="
