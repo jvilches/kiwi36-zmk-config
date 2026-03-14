@@ -1,3 +1,14 @@
+# Claude Code session data
 .claude/
+
+# ZMK / west build artifacts
 build/
 output/
+*.uf2
+*.bin
+*.hex
+.west/
+
+# OS
+.DS_Store
+Thumbs.db
