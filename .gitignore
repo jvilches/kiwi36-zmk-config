@@ -7,7 +7,14 @@ output/
 *.uf2
 *.bin
 *.hex
+
+# West workspace — fetched by `west update`, not part of this repo
 .west/
+zmk/
+zephyr/
+modules/
+prospector-zmk-module/
+zmk-dongle-screen/
 
 # OS
 .DS_Store
