@@ -1,0 +1,15 @@
+# Force LF line endings for files that run in Linux containers or are
+# processed by Linux tools (west, cmake, zephyr). Without this, git on
+# Windows will check these out with CRLF, causing "bad interpreter" or
+# "unexpected end of file" errors inside the devcontainer.
+
+*.sh        text eol=lf
+*.overlay   text eol=lf
+*.dtsi      text eol=lf
+*.conf      text eol=lf
+*.keymap    text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.cmake     text eol=lf
+Makefile    text eol=lf
