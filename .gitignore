@@ -14,6 +14,7 @@ zmk/
 zephyr/
 !zephyr/module.yml
 modules/
+optional/
 prospector-zmk-module/
 zmk-dongle-screen/
 

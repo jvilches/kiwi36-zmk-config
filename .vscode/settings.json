@@ -1,0 +1,12 @@
+{
+  // Hide west-fetched repos from Source Control — they are managed by west,
+  // not by this repo's git history.
+  "git.ignoredRepositories": [
+    "zmk",
+    "zephyr",
+    "modules",
+    "optional",
+    "prospector-zmk-module",
+    "zmk-dongle-screen"
+  ]
+}
