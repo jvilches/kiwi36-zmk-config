@@ -12,6 +12,7 @@ output/
 .west/
 zmk/
 zephyr/
+!zephyr/module.yml
 modules/
 prospector-zmk-module/
 zmk-dongle-screen/
