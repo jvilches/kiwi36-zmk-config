@@ -32,22 +32,48 @@ ZMK firmware configuration for the [Kiwi36](https://github.com/klouderone/zmk-co
 
 ### Dependencies
 
-All dependencies are declared in `config/west.yml` and fetched automatically by `west update`. You do not need to clone anything manually.
+All dependencies are declared in `config/west.yml` and fetched automatically. You do not need to clone anything manually.
 
 | Dependency | Repository | Version |
 |---|---|---|
-| ZMK firmware | [zmkfirmware/zmk](https://github.com/zmkfirmware/zmk) | `main` |
-| prospector-zmk-module | [carrefinho/prospector-zmk-module](https://github.com/carrefinho/prospector-zmk-module) | `main` |
-| zmk-dongle-screen | [janpfischer/zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | `main` |
+| ZMK firmware | [zmkfirmware/zmk](https://github.com/zmkfirmware/zmk) | `v0.3.0` |
+| prospector-zmk-module | [carrefinho/prospector-zmk-module](https://github.com/carrefinho/prospector-zmk-module) | `main` (dongle only) |
+| zmk-dongle-screen | [janpfischer/zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | `main` (dongle only) |
 
-After `west update`, the modules are cloned into the repo root alongside the `config/` directory:
+The two dongle modules are in the `dongle` west group and are **not** fetched during initial setup — `build.sh` fetches them automatically the first time a dongle variant is built.
+
+### Repository layout
+
 ```
 zmk-config/
-├── config/               ← this repo
-├── zmk/                  ← fetched by west
-├── prospector-zmk-module/← fetched by west
-└── zmk-dongle-screen/    ← fetched by west
+├── config/
+│   ├── boards/shields/kiwi36/   ← shield files (keymaps, overlays, Kconfig)
+│   ├── kiwi36.conf               ← base config for split halves
+│   └── west.yml                  ← west manifest
+├── build.sh                      ← build script
+├── .devcontainer/
+│   ├── devcontainer.json
+│   └── setup.sh                  ← runs west init + west update on first start
+├── zmk/                          ← fetched by west (gitignored)
+├── zephyr/                       ← Docker volume (see below)
+├── modules/                      ← Docker volume (see below)
+└── tools/                        ← Docker volume (see below)
 ```
+
+### Dev container internals
+
+The devcontainer uses a mix of a bind mount and named Docker volumes:
+
+| Path | How mounted | Contents |
+|---|---|---|
+| `/workspaces/zmk-config/` | bind mount | your repo, editable on the host |
+| `.../zephyr/` | Docker volume `zmk-zephyr` | Zephyr RTOS source (fetched by west) |
+| `.../modules/` | Docker volume `zmk-zephyr-modules` | Zephyr modules (fetched by west) |
+| `.../tools/` | Docker volume `zmk-zephyr-tools` | Zephyr toolchain helpers |
+
+The named volumes survive container rebuilds so Zephyr is only downloaded once. The bind mount means all files under `config/` are directly editable from the host.
+
+**Important:** The Docker volumes completely shadow the `zephyr/`, `modules/`, and `tools/` directories inside the container. Never put your own files in those directories — they will be invisible to the build system. All user config belongs in `config/` (or the repo root).
 
 ### First-time setup
 
@@ -59,7 +85,13 @@ zmk-config/
 
 2. VSCode will detect `.devcontainer/devcontainer.json` and prompt **"Reopen in Container"** — click it.
 
-3. The container starts and runs `west init && west update` automatically. This fetches ZMK, the two modules, and all Zephyr toolchain dependencies into Docker volumes. **This only happens once** — subsequent opens reuse the cached volumes.
+3. The container starts and runs `.devcontainer/setup.sh` automatically, which:
+   - Runs `west init -l config` (idempotent — skipped if already initialised)
+   - Disables the `dongle` west group so dongle modules are not fetched yet
+   - Runs `west update` to fetch ZMK and Zephyr into the named volumes
+   - Runs `west zephyr-export` to register Zephyr in the CMake package registry
+
+   **This only happens once** — subsequent opens reuse the cached volumes.
 
 ### Build all variants
 
@@ -69,25 +101,27 @@ Inside the devcontainer terminal:
 bash build.sh
 ```
 
-Output `.uf2` files are written to `output/`.
+Output `.uf2` files are written to `output/`. The first run also fetches the dongle modules (`prospector-zmk-module`, `zmk-dongle-screen`).
 
 ### Build a single variant manually
 
 ```bash
 ZMK=$(west list zmk -f '{abspath}')
 CONFIG=$(west list config -f '{abspath}')
-MODULES=$(dirname "$CONFIG")
 
-# Left half
+# Left half with Nice!View
 west build -p -s "$ZMK/app" -d build/kiwi36_left -b nice_nano_v2 -- \
   -DSHIELD="kiwi36_left nice_view_adapter nice_view" \
-  -DZMK_CONFIG="$CONFIG" \
-  -DZMK_EXTRA_MODULES="$MODULES"
+  -DZMK_CONFIG="$CONFIG"
 
-# USB dongle (no screen)
+# USB dongle (no screen) — requires dongle group enabled first
+west config manifest.group-filter -- +dongle
+west update prospector-zmk-module zmk-dongle-screen
+PROSPECTOR=$(west list prospector-zmk-module -f '{abspath}')
 west build -p -s "$ZMK/app" -d build/kiwi36_dongle -b nice_nano_v2 -- \
   -DSHIELD="kiwi36_dongle" \
-  -DZMK_EXTRA_MODULES="$MODULES;$(west list prospector-zmk-module -f '{abspath}')"
+  -DZMK_CONFIG="$CONFIG" \
+  -DZMK_EXTRA_MODULES="$PROSPECTOR"
 ```
 
 ### Flashing
@@ -112,7 +146,7 @@ Home row mods (left: GUI/ALT/CTL/SFT, right: SFT/CTL/ALT/GUI) use a 180 ms tappi
 
 ## Modules
 
-Both modules are required to build the dongle variants. They are fetched automatically via `west update` — see [Dependencies](#dependencies) above.
+Both modules are required to build the dongle variants. They are in the `dongle` west group and fetched on demand by `build.sh`.
 
 | Module | Used for |
 |---|---|
