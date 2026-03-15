@@ -14,9 +14,6 @@ else
     echo "--- west already initialized, skipping init ---"
 fi
 
-echo "--- Disabling optional dongle modules (fetched on demand by build.sh) ---"
-west config manifest.group-filter -- -dongle
-
 echo "--- west update ---"
 west update
 

@@ -40,16 +40,6 @@ build_shield_with_dongle() {
     cp "build/$build_name/zephyr/zmk.uf2" "$OUTPUT_DIR/${build_name}.uf2"
 }
 
-# Enable the dongle west group and fetch the optional modules if not yet present
-ensure_dongle_modules() {
-    if [ -d "$PROSPECTOR_MODULE_PATH" ] && [ -d "$YADS_MODULE_PATH" ]; then
-        return 0
-    fi
-    echo "--- Fetching dongle modules ---"
-    west config manifest.group-filter -- +dongle
-    west update prospector-zmk-module zmk-dongle-screen
-}
-
 # Build USB dongle (no screen, uses prospector module)
 build_dongle() {
     local shield=$1
@@ -96,7 +86,6 @@ build_shield "kiwi36" "left"
 build_shield "kiwi36" "right"
 build_shield_with_dongle "kiwi36" "left"
 build_shield_with_dongle "kiwi36" "right"
-ensure_dongle_modules
 build_dongle "kiwi36"
 build_dongle_yads "kiwi36"
 build_reset
