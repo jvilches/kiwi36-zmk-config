@@ -14,8 +14,6 @@ zmk/
 zephyr/
 modules/
 optional/
-prospector-zmk-module/
-zmk-dongle-screen/
 
 # OS
 .DS_Store

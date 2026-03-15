@@ -14,11 +14,13 @@ manifest:
     - name: prospector-zmk-module
       remote: carrefinho
       revision: main
+      path: optional/prospector-zmk-module
       groups:
         - dongle
     - name: zmk-dongle-screen
       remote: janpfischer
       revision: main
+      path: optional/zmk-dongle-screen
       groups:
         - dongle
   self:
