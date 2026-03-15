@@ -40,6 +40,14 @@ All dependencies are declared in `config/west.yml` and fetched automatically. Yo
 | prospector-zmk-module | [carrefinho/prospector-zmk-module](https://github.com/carrefinho/prospector-zmk-module) | `main` (dongle only) |
 | zmk-dongle-screen | [janpfischer/zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | `main` (dongle only) |
 
+#### Why v0.3.0 and not ZMK main?
+
+ZMK `v0.3.0` is the latest stable release and internally uses **Zephyr 3.5** (`v3.5.0+zmk-fixes`). After this release, ZMK `main` migrated to Zephyr 4.1 — and both dongle modules (`prospector-zmk-module` and `zmk-dongle-screen`) have `main` branches that target Zephyr 3.5 only.
+
+Using ZMK `main` would require switching both modules to their Zephyr 4.1-compatible branches (`core/zephyr-4.1` and `upgrade-4.1` respectively), which are still work-in-progress. Until those branches stabilise and merge to `main`, `v0.3.0` is the correct anchor point.
+
+The devcontainer image `zmkfirmware/zmk-dev-arm:3.5-branch` ships the matching Zephyr 3.5 SDK.
+
 The two dongle modules are in the `dongle` west group and are **not** fetched during initial setup — `build.sh` fetches them automatically the first time a dongle variant is built.
 
 ### Repository layout
