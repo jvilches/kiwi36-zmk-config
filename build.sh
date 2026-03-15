@@ -23,8 +23,7 @@ build_shield() {
     echo "--- Building: $build_name ---"
     west build -p -s "$ZMK_APP_PATH" -d "build/$build_name" -b "$BOARD" -- \
         -DSHIELD="${shield}_${side} nice_view_adapter nice_view" \
-        -DZMK_CONFIG="$CONFIG_PATH" \
-        -DZMK_EXTRA_MODULES="$MODULES_PATH"
+        -DZMK_CONFIG="$CONFIG_PATH"
     cp "build/$build_name/zephyr/zmk.uf2" "$OUTPUT_DIR/${build_name}.uf2"
 }
 
@@ -36,7 +35,6 @@ build_shield_with_dongle() {
     west build -p -s "$ZMK_APP_PATH" -d "build/$build_name" -b "$BOARD" -- \
         -DSHIELD="${shield}_${side} nice_view_adapter nice_view" \
         -DZMK_CONFIG="$CONFIG_PATH" \
-        -DZMK_EXTRA_MODULES="$MODULES_PATH" \
         -DCONFIG_ZMK_SPLIT=y \
         -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
     cp "build/$build_name/zephyr/zmk.uf2" "$OUTPUT_DIR/${build_name}.uf2"
@@ -59,7 +57,8 @@ build_dongle() {
     echo "--- Building: $build_name ---"
     west build -p -s "$ZMK_APP_PATH" -d "build/$build_name" -b "$DONGLE_BOARD" -- \
         -DSHIELD="${shield}_dongle" \
-        -DZMK_EXTRA_MODULES="$MODULES_PATH;$PROSPECTOR_MODULE_PATH"
+        -DZMK_CONFIG="$CONFIG_PATH" \
+        -DZMK_EXTRA_MODULES="$PROSPECTOR_MODULE_PATH"
     cp "build/$build_name/zephyr/zmk.uf2" "$OUTPUT_DIR/${build_name}.uf2"
 }
 
@@ -70,7 +69,8 @@ build_dongle_yads() {
     echo "--- Building: $build_name ---"
     west build -p -s "$ZMK_APP_PATH" -d "build/$build_name" -b "$DONGLE_BOARD" -- \
         -DSHIELD="${shield}_dongle_yads dongle_screen" \
-        -DZMK_EXTRA_MODULES="$MODULES_PATH;$YADS_MODULE_PATH"
+        -DZMK_CONFIG="$CONFIG_PATH" \
+        -DZMK_EXTRA_MODULES="$YADS_MODULE_PATH"
     cp "build/$build_name/zephyr/zmk.uf2" "$OUTPUT_DIR/${build_name}.uf2"
 }
 
