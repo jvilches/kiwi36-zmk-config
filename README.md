@@ -18,7 +18,6 @@ ZMK firmware configuration for the [Kiwi36](https://github.com/klouderone/zmk-co
 | `kiwi36_right.uf2` | Right half |
 | `kiwi36_left_dongle.uf2` | Left half as pure BLE peripheral (for use with dongle) |
 | `kiwi36_right_dongle.uf2` | Right half as pure BLE peripheral (for use with dongle) |
-| `kiwi36_prospector_dongle.uf2` | USB dongle, no screen |
 | `kiwi36_yads_dongle.uf2` | USB dongle with YADS screen |
 | `settings_reset.uf2` | Reset BLE bonds on a split half |
 | `settings_reset_dongle.uf2` | Reset BLE bonds on the dongle |
@@ -36,19 +35,12 @@ All dependencies are declared in `config/west.yml` and fetched automatically. Yo
 
 | Dependency | Repository | Version |
 |---|---|---|
-| ZMK firmware | [zmkfirmware/zmk](https://github.com/zmkfirmware/zmk) | `v0.3.0` |
-| prospector-zmk-module | [carrefinho/prospector-zmk-module](https://github.com/carrefinho/prospector-zmk-module) | `main` (dongle only) |
-| zmk-dongle-screen | [janpfischer/zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | `main` (dongle only) |
+| ZMK firmware | [zmkfirmware/zmk](https://github.com/zmkfirmware/zmk) | `main` (Zephyr 4.1) |
+| zmk-dongle-screen | [janpfischer/zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | `upgrade-4.1` (dongle only) |
 
-#### Why v0.3.0 and not ZMK main?
+ZMK `main` targets **Zephyr 4.1**. The `upgrade-4.1` branch of zmk-dongle-screen is required — it rewrites the display driver for Zephyr 4.1's MIPI DBI bus abstraction and upgrades to LVGL v9. The `main` branch of the module targets Zephyr 3.5 only and is not compatible.
 
-ZMK `v0.3.0` is the latest stable release and internally uses **Zephyr 3.5** (`v3.5.0+zmk-fixes`). After this release, ZMK `main` migrated to Zephyr 4.1 — and both dongle modules (`prospector-zmk-module` and `zmk-dongle-screen`) have `main` branches that target Zephyr 3.5 only.
-
-Using ZMK `main` would require switching both modules to their Zephyr 4.1-compatible branches (`core/zephyr-4.1` and `upgrade-4.1` respectively), which are still work-in-progress. Until those branches stabilise and merge to `main`, `v0.3.0` is the correct anchor point.
-
-The devcontainer image `zmkfirmware/zmk-dev-arm:3.5-branch` ships the matching Zephyr 3.5 SDK.
-
-The two dongle modules are in the `dongle` west group and are **not** fetched during initial setup — `build.sh` fetches them automatically the first time a dongle variant is built.
+The dongle module is in the `dongle` west group and is **not** fetched during initial setup — `build.sh` fetches it automatically the first time a dongle variant is built.
 
 ### Repository layout
 
@@ -109,7 +101,7 @@ Inside the devcontainer terminal:
 bash build.sh
 ```
 
-Output `.uf2` files are written to `output/`. The first run also fetches the dongle modules (`prospector-zmk-module`, `zmk-dongle-screen`).
+Output `.uf2` files are written to `output/`. The first run also fetches `zmk-dongle-screen` automatically.
 
 ### Build a single variant manually
 
@@ -118,18 +110,18 @@ ZMK=$(west list zmk -f '{abspath}')
 CONFIG=$(west list config -f '{abspath}')
 
 # Left half with Nice!View
-west build -p -s "$ZMK/app" -d build/kiwi36_left -b nice_nano_v2 -- \
+west build -p -s "$ZMK/app" -d build/kiwi36_left -b nice_nano//zmk -- \
   -DSHIELD="kiwi36_left nice_view_adapter nice_view" \
   -DZMK_CONFIG="$CONFIG"
 
-# USB dongle (no screen) — requires dongle group enabled first
+# YADS dongle — requires dongle group enabled first
 west config manifest.group-filter -- +dongle
-west update prospector-zmk-module zmk-dongle-screen
-PROSPECTOR=$(west list prospector-zmk-module -f '{abspath}')
-west build -p -s "$ZMK/app" -d build/kiwi36_dongle -b nice_nano_v2 -- \
-  -DSHIELD="kiwi36_dongle" \
+west update zmk-dongle-screen
+YADS=$(west list zmk-dongle-screen -f '{abspath}')
+west build -p -s "$ZMK/app" -d build/kiwi36_dongle_yads -b nice_nano//zmk -- \
+  -DSHIELD="kiwi36_dongle_yads dongle_screen" \
   -DZMK_CONFIG="$CONFIG" \
-  -DZMK_EXTRA_MODULES="$PROSPECTOR"
+  -DZMK_EXTRA_MODULES="$YADS"
 ```
 
 ### Flashing
@@ -241,9 +233,8 @@ Put the Nice!Nano into bootloader mode by double-tapping the reset button. It mo
 
 ## Modules
 
-Both modules are required to build the dongle variants. They are in the `dongle` west group and fetched on demand by `build.sh`.
+The module is in the `dongle` west group and fetched on demand by `build.sh`.
 
-| Module | Used for |
-|---|---|
-| [prospector-zmk-module](https://github.com/carrefinho/prospector-zmk-module) | Ambient light sensor support on the dongle |
-| [zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | YADS dongle screen support |
+| Module | Branch | Used for |
+|---|---|---|
+| [zmk-dongle-screen](https://github.com/janpfischer/zmk-dongle-screen) | `upgrade-4.1` | YADS dongle screen (ST7789V, LVGL v9, Zephyr 4.1) |
