@@ -16,12 +16,15 @@ config ZMK_USB
 config ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS
     default 4
 
-# Dongle outputs via USB — needs peripherals + 1 for internal BLE scan/connect overhead
+# BT_MAX_CONN: 4 peripherals + 1 spare for BLE scan/connect overhead
 config BT_MAX_CONN
     default 5
 
+# BT_MAX_PAIRED: bonds are stored for both directions —
+#   4 keyboard half bonds (central→peripheral) +
+#   4 host BLE profile bonds (peripheral→host, one per ZMK BLE profile)
 config BT_MAX_PAIRED
-    default 5
+    default 8
 
 endif
 
