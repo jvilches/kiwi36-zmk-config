@@ -76,14 +76,14 @@ build_reset_dongle() {
     cp "build/reset_dongle/zephyr/zmk.uf2" "$OUTPUT_DIR/settings_reset_dongle.uf2"
 }
 
-#build_shield "kiwi36" "left"
-#build_shield "kiwi36" "right"
-#build_shield_with_dongle "kiwi36" "left"
-#build_shield_with_dongle "kiwi36" "right"
+build_shield "kiwi36" "left"
+build_shield "kiwi36" "right"
+build_shield_with_dongle "kiwi36" "left"
+build_shield_with_dongle "kiwi36" "right"
 ensure_dongle_module
 build_dongle_yads "kiwi36"
-#build_reset
-#build_reset_dongle
+build_reset
+build_reset_dongle
 
 echo ""
 echo "Done! Output files:"
