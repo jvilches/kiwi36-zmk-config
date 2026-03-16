@@ -7,11 +7,9 @@ set -e
 ZMK_APP_PATH="$(west list zmk -f '{abspath}')/app"
 CONFIG_PATH="$(west list config -f '{abspath}')"
 MODULES_PATH="$(dirname "$CONFIG_PATH")"
-PROSPECTOR_MODULE_PATH="$(west list prospector-zmk-module -f '{abspath}')"
 YADS_MODULE_PATH="$(west list zmk-dongle-screen -f '{abspath}')"
 OUTPUT_DIR="$MODULES_PATH/output"
-BOARD="nice_nano_v2"
-DONGLE_BOARD="nice_nano_v2"
+BOARD="nice_nano//zmk"
 
 mkdir -p "$OUTPUT_DIR"
 rm -f "$OUTPUT_DIR"/*.uf2
@@ -40,28 +38,12 @@ build_shield_with_dongle() {
     cp "build/$build_name/zephyr/zmk.uf2" "$OUTPUT_DIR/${build_name}.uf2"
 }
 
-# Re-enable the dongle west group and fetch the modules if not yet present.
-# These were excluded from the initial "west update" in setup.sh because west
-# fails to fetch them during container setup — see setup.sh for context.
-ensure_dongle_modules() {
-    if [ -d "$PROSPECTOR_MODULE_PATH" ] && [ -d "$YADS_MODULE_PATH" ]; then
-        return 0
-    fi
-    echo "--- Fetching dongle modules ---"
+# Sync zmk-dongle-screen to the manifest revision before dongle builds.
+# Excluded from the initial "west update" in setup.sh — see setup.sh for context.
+ensure_dongle_module() {
+    echo "--- Syncing dongle module ---"
     west config manifest.group-filter -- +dongle
-    west update prospector-zmk-module zmk-dongle-screen
-}
-
-# Build USB dongle (no screen, uses prospector module)
-build_dongle() {
-    local shield=$1
-    local build_name="${shield}_prospector_dongle"
-    echo "--- Building: $build_name ---"
-    west build -p -s "$ZMK_APP_PATH" -d "build/$build_name" -b "$DONGLE_BOARD" -- \
-        -DSHIELD="${shield}_dongle" \
-        -DZMK_CONFIG="$CONFIG_PATH" \
-        -DZMK_EXTRA_MODULES="$PROSPECTOR_MODULE_PATH"
-    cp "build/$build_name/zephyr/zmk.uf2" "$OUTPUT_DIR/${build_name}.uf2"
+    west update zmk-dongle-screen
 }
 
 # Build USB dongle with YADS screen
@@ -69,7 +51,7 @@ build_dongle_yads() {
     local shield=$1
     local build_name="${shield}_yads_dongle"
     echo "--- Building: $build_name ---"
-    west build -p -s "$ZMK_APP_PATH" -d "build/$build_name" -b "$DONGLE_BOARD" -- \
+    west build -p -s "$ZMK_APP_PATH" -d "build/$build_name" -b "$BOARD" -- \
         -DSHIELD="${shield}_dongle_yads dongle_screen" \
         -DZMK_CONFIG="$CONFIG_PATH" \
         -DZMK_EXTRA_MODULES="$YADS_MODULE_PATH"
@@ -88,21 +70,20 @@ build_reset() {
 # Build settings reset firmware for dongle
 build_reset_dongle() {
     echo "--- Building: settings_reset_dongle ---"
-    west build -p -s "$ZMK_APP_PATH" -d "build/reset_dongle" -b "$DONGLE_BOARD" -- \
+    west build -p -s "$ZMK_APP_PATH" -d "build/reset_dongle" -b "$BOARD" -- \
         -DSHIELD="settings_reset" \
         -DZMK_CONFIG="$CONFIG_PATH"
     cp "build/reset_dongle/zephyr/zmk.uf2" "$OUTPUT_DIR/settings_reset_dongle.uf2"
 }
 
-build_shield "kiwi36" "left"
-build_shield "kiwi36" "right"
-build_shield_with_dongle "kiwi36" "left"
-build_shield_with_dongle "kiwi36" "right"
-ensure_dongle_modules
-build_dongle "kiwi36"
+#build_shield "kiwi36" "left"
+#build_shield "kiwi36" "right"
+#build_shield_with_dongle "kiwi36" "left"
+#build_shield_with_dongle "kiwi36" "right"
+ensure_dongle_module
 build_dongle_yads "kiwi36"
-build_reset
-build_reset_dongle
+#build_reset
+#build_reset_dongle
 
 echo ""
 echo "Done! Output files:"

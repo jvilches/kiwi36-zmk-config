@@ -9,16 +9,11 @@ manifest:
   projects:
     - name: zmk
       remote: zmkfirmware
-      revision: v0.3.0
-      import: app/west.yml
-    - name: prospector-zmk-module
-      remote: carrefinho
       revision: main
-      groups:
-        - dongle
+      import: app/west.yml
     - name: zmk-dongle-screen
       remote: janpfischer
-      revision: main
+      revision: upgrade-4.1
       groups:
         - dongle
   self:

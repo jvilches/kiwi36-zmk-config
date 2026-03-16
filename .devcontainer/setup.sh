@@ -14,9 +14,8 @@ else
     echo "--- west already initialized, skipping init ---"
 fi
 
-# The dongle modules (prospector-zmk-module, zmk-dongle-screen) are tagged with
-# groups: [dongle] in west.yml and are excluded from this initial update.
-# They are fetched on demand by build.sh.
+# The dongle modules are in separate groups in west.yml and excluded from this
+# initial update — fetched on demand by build.sh to avoid Kconfig conflicts.
 echo "--- Disabling dongle modules for initial setup (fetched on demand by build.sh) ---"
 west config manifest.group-filter -- -dongle
 
