@@ -16,12 +16,12 @@ config ZMK_USB
 config ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS
     default 4
 
-# Dongle outputs via USB — no BT host profiles needed, set equal to peripherals
+# Dongle outputs via USB — needs peripherals + 1 for internal BLE scan/connect overhead
 config BT_MAX_CONN
-    default 4
+    default 5
 
 config BT_MAX_PAIRED
-    default 4
+    default 5
 
 endif
 
