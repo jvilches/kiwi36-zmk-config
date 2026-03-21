@@ -58,9 +58,12 @@ static void set_status_symbol(struct zmk_widget_output_status *widget, struct ou
     const char *usb_color = state.usb_is_hid_ready ? "ffffff" : "ff0000";
     char transport_text[50] = {};
 
-    // Profile accent: "BLE" word and profile number always share the same color.
+    // "BLE" word matches the profile accent only when connected; otherwise
+    // falls back to connection-status colors (blue = bonded, white = open).
     int idx = state.active_profile_index % (int)ARRAY_SIZE(profile_colors);
-    const char *ble_hex = profile_colors[idx].hex;
+    const char *ble_hex = state.active_profile_connected ? profile_colors[idx].hex
+                        : state.active_profile_bonded    ? "4040ff"
+                        :                                  "ffffff";
 
     switch (state.selected_endpoint.transport)
     {
