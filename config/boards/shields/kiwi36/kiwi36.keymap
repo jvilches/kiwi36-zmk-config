@@ -59,6 +59,15 @@ nice_view_spi: &spi0 {
         };
     };
 
+    combos {
+        compatible = "zmk,combos";
+        combo_dongle_bootloader {
+            timeout-ms = <50>;
+            key-positions = <0 9 30>;
+            bindings = <&bootloader>;
+        };
+    };
+
     keymap {
         compatible = "zmk,keymap";
 

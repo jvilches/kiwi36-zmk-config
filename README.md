@@ -128,6 +128,8 @@ west build -p -s "$ZMK/app" -d build/kiwi36_dongle_yads -b nice_nano//zmk -- \
 
 Put the Nice!Nano into bootloader mode by double-tapping the reset button. It mounts as a USB drive — drag the `.uf2` file onto it.
 
+**Dongle shortcut:** Press **Q + P + ESC** simultaneously (within 50ms) to put the dongle into bootloader mode without touching the physical button. This works because ZMK combos always execute on the central device, not the peripheral that pressed the keys.
+
 ## Keymap
 
 > **Legend:** `·` = tap · hold &nbsp;|&nbsp; `►` = to-layer (permanent switch) &nbsp;|&nbsp; `BOOT` = double-tap reset &nbsp;|&nbsp; `CAP` = Caps Word
