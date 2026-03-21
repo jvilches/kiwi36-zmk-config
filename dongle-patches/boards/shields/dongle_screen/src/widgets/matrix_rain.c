@@ -5,23 +5,32 @@
  *
  * Matrix rain animation widget.
  *
- * Fills the vertical gap between the WPM number and the layer name
- * (x=20–116, y=45–100 on screen) with falling single-character "drops".
+ * Thread-safety model
+ * ───────────────────
+ * LVGL is not thread-safe.  All lv_* calls must come from a single context.
+ * We follow the mod_status.c pattern: the k_timer callback (ISR) owns all
+ * LVGL updates.  The key event listener (ZMK event-manager thread) only
+ * writes to an atomic bitmask — zero LVGL calls.  The timer reads that mask
+ * each tick and does the actual spawn + tick rendering.
  *
- * Behaviour:
- *   - Each key press spawns up to 2 drops in random inactive columns.
- *   - Active columns finish their fall then go dark (no looping).
- *   - If a key hits an already-active column it is ignored.
- *   - Head color tracks the active layer accent; trail is 30% brightness.
- *   - Base layer (0) uses classic Matrix green #00FF41 instead of white.
+ * Layout
+ * ──────
+ * 8 columns × 12 px = 96 px wide, 55 px tall.
+ * Positioned at TOP_LEFT (20, 45) — fills the gap between the WPM row and
+ * the layer name.  Each column has one head label and one trail label (16
+ * lv_label objects total; no canvas buffer to avoid exhausting the pool).
  *
- * Rendering: one head label + one trail label per column (16 lv_label
- * objects total).  No canvas buffer — avoids consuming the LVGL memory pool.
- *
- * Timer: k_timer at 80 ms (~12 fps), same pattern as mod_status.c.
+ * Behaviour
+ * ─────────
+ * • Key press  → sets bit(s) in spawn_pending; timer picks them up next tick.
+ * • Active column → ignored on new keypress (previous drop finishes).
+ * • No keypresses → active drops finish their fall, zone goes dark.
+ * • Head color tracks the active layer accent (base = #00FF41 Matrix green).
+ * • Trail color = head darkened to ~30 % brightness.
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/random/random.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -37,10 +46,10 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 /* ── Geometry ────────────────────────────────────────────────────────── */
 
 #define RAIN_COLS      8     /* number of columns                         */
-#define RAIN_CHAR_W   12     /* column pitch in px (≈ Montserrat 20 width)*/
+#define RAIN_CHAR_W   12     /* column pitch in px (≈ Montserrat 20 char) */
 #define RAIN_CHAR_H   20     /* line height in px  (Montserrat 20)        */
 #define RAIN_ZONE_H   55     /* widget height in px                       */
-#define RAIN_TICK_MS  80     /* timer period in ms                        */
+#define RAIN_TICK_MS  80     /* timer period in ms (~12 fps)              */
 
 /* ── Layer colour palette (mirrors layer_status.c) ──────────────────── */
 
@@ -61,6 +70,26 @@ static const lv_color_t layer_colors[] = {
 static const char rain_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#%&*=+?";
 #define RAIN_CHARS_LEN (sizeof(rain_chars) - 1u)
 
+/* ── ISR-safe PRNG (xorshift32) ─────────────────────────────────────── */
+/*
+ * sys_rand32_get() may block when backed by a hardware entropy source.
+ * This lightweight PRNG is safe to call from the timer ISR.
+ */
+static uint32_t prng_state = 0xDEADBEEFu;
+
+static uint32_t fast_rand(void)
+{
+    prng_state ^= prng_state << 13;
+    prng_state ^= prng_state >> 17;
+    prng_state ^= prng_state << 5;
+    return prng_state;
+}
+
+static char rand_char(void)
+{
+    return rain_chars[fast_rand() % RAIN_CHARS_LEN];
+}
+
 /* ── Per-column state ────────────────────────────────────────────────── */
 
 typedef struct {
@@ -73,16 +102,22 @@ typedef struct {
 static rain_col_t  cols[RAIN_COLS];
 static lv_obj_t   *head_lbl[RAIN_COLS];
 static lv_obj_t   *trail_lbl[RAIN_COLS];
-static lv_color_t  cur_head_color;
-static lv_color_t  cur_trail_color;
+
+/* Atomic bitmask: bit i set = column i should spawn on next timer tick.
+ * Written by key_listener (event thread), read+cleared by timer ISR. */
+static ATOMIC_DEFINE(spawn_pending, RAIN_COLS);
+
+/* Current colours — written by layer_listener (event thread), read by
+ * timer ISR.  lv_color_t is 2 bytes; 16-bit reads on Cortex-M are atomic. */
+static lv_color_t cur_head_color;
+static lv_color_t cur_trail_color;
 
 /* ── Colour helpers ──────────────────────────────────────────────────── */
 
-/* Darken a colour to ~30 % brightness by mixing with black. */
 static lv_color_t darken(lv_color_t c)
 {
-    /* lv_color_mix(c1, c2, ratio): ratio=255 → c1, ratio=0 → c2 */
-    return lv_color_mix(c, lv_color_black(), 77); /* 77/255 ≈ 0.30 */
+    /* lv_color_mix(c1, c2, ratio): ratio 255→c1, 0→c2; 77/255 ≈ 30 % */
+    return lv_color_mix(c, lv_color_black(), 77);
 }
 
 static void apply_layer_color(uint8_t layer)
@@ -91,21 +126,14 @@ static void apply_layer_color(uint8_t layer)
     cur_trail_color = darken(cur_head_color);
 }
 
-/* ── Character helper ────────────────────────────────────────────────── */
-
-static char rand_char(void)
-{
-    return rain_chars[sys_rand32_get() % RAIN_CHARS_LEN];
-}
-
-/* ── Column lifecycle ────────────────────────────────────────────────── */
+/* ── Column lifecycle (called only from timer ISR) ───────────────────── */
 
 static void spawn_col(int i)
 {
-    if (cols[i].active) return; /* let the current drop finish */
+    if (cols[i].active) return; /* previous drop still running — ignore */
 
     cols[i].head_y   = 0;
-    cols[i].speed    = 1u + (uint8_t)(sys_rand32_get() % 3u); /* 1, 2, or 3 */
+    cols[i].speed    = (uint8_t)(1u + fast_rand() % 3u); /* 1, 2, or 3  */
     cols[i].tick_mod = 0;
     cols[i].active   = true;
 
@@ -135,14 +163,14 @@ static void tick_col(int i)
         lv_label_set_text(head_lbl[i], buf);
     }
 
-    /* Show trail once it has entered the zone (one char-height behind head) */
+    /* Show trail once it enters the zone (one char-height behind head) */
     int16_t trail_y = cols[i].head_y - RAIN_CHAR_H;
     if (trail_y >= 0) {
         lv_obj_set_pos(trail_lbl[i], i * RAIN_CHAR_W, trail_y);
         lv_obj_clear_flag(trail_lbl[i], LV_OBJ_FLAG_HIDDEN);
     }
 
-    /* Deactivate once head has fully exited the bottom of the zone */
+    /* Deactivate once head has fully exited the zone bottom */
     if (cols[i].head_y >= RAIN_ZONE_H) {
         cols[i].active = false;
         lv_obj_add_flag(head_lbl[i],  LV_OBJ_FLAG_HIDDEN);
@@ -150,13 +178,22 @@ static void tick_col(int i)
     }
 }
 
-/* ── Timer (80 ms, same approach as mod_status.c) ───────────────────── */
+/* ── Timer — single owner of all LVGL calls ─────────────────────────── */
 
 static struct k_timer rain_timer;
 
 static void rain_timer_cb(struct k_timer *timer)
 {
     ARG_UNUSED(timer);
+
+    /* 1. Process spawn requests from key events (atomic read + clear) */
+    for (int i = 0; i < RAIN_COLS; i++) {
+        if (atomic_test_and_clear_bit(spawn_pending, i)) {
+            spawn_col(i);
+        }
+    }
+
+    /* 2. Advance all active columns */
     for (int i = 0; i < RAIN_COLS; i++) {
         tick_col(i);
     }
@@ -169,13 +206,17 @@ static int key_listener(const zmk_event_t *eh)
     const struct zmk_keycode_state_changed *ev = as_zmk_keycode_state_changed(eh);
     if (!ev || !ev->state) return ZMK_EV_EVENT_BUBBLE; /* key-down only */
 
-    /* Try to spawn up to 2 drops; skip already-active columns */
-    int spawned = 0, attempts = 0;
-    while (spawned < 2 && attempts < 16) {
+    /*
+     * Mark up to 2 random columns to spawn on the next timer tick.
+     * NO LVGL calls here — the timer ISR owns all rendering.
+     * atomic_test_and_set_bit returns the previous value; we only count
+     * a column if the bit was previously clear (not already pending).
+     */
+    int marked = 0, attempts = 0;
+    while (marked < 2 && attempts < 16) {
         int col = (int)(sys_rand32_get() % (uint32_t)RAIN_COLS);
-        if (!cols[col].active) {
-            spawn_col(col);
-            spawned++;
+        if (!atomic_test_and_set_bit(spawn_pending, col)) {
+            marked++;
         }
         attempts++;
     }
@@ -185,6 +226,7 @@ static int key_listener(const zmk_event_t *eh)
 static int layer_listener(const zmk_event_t *eh)
 {
     ARG_UNUSED(eh);
+    /* Update colour variables only — no LVGL calls. */
     apply_layer_color(zmk_keymap_highest_layer_active());
     return ZMK_EV_EVENT_BUBBLE;
 }
@@ -201,22 +243,24 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
 {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, RAIN_COLS * RAIN_CHAR_W, RAIN_ZONE_H);
-    lv_obj_set_style_bg_opa(widget->obj,     LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(widget->obj, 0,           LV_PART_MAIN);
-    lv_obj_set_style_pad_all(widget->obj,    0,             LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(widget->obj,       LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(widget->obj, 0,             LV_PART_MAIN);
+    lv_obj_set_style_pad_all(widget->obj,      0,             LV_PART_MAIN);
     lv_obj_clear_flag(widget->obj, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Seed PRNG with a value from the hardware entropy source */
+    prng_state = sys_rand32_get();
+    if (prng_state == 0) prng_state = 0xDEADBEEFu; /* xorshift needs non-zero */
 
     apply_layer_color(0); /* start with base-layer colour */
 
     for (int i = 0; i < RAIN_COLS; i++) {
-        /* Head label — bright, falls first */
         head_lbl[i] = lv_label_create(widget->obj);
         lv_obj_set_style_text_color(head_lbl[i], cur_head_color, 0);
         lv_obj_set_pos(head_lbl[i], i * RAIN_CHAR_W, 0);
         lv_label_set_text(head_lbl[i], "A");
         lv_obj_add_flag(head_lbl[i], LV_OBJ_FLAG_HIDDEN);
 
-        /* Trail label — dim, one char-height behind head */
         trail_lbl[i] = lv_label_create(widget->obj);
         lv_obj_set_style_text_color(trail_lbl[i], cur_trail_color, 0);
         lv_obj_set_pos(trail_lbl[i], i * RAIN_CHAR_W, 0);
