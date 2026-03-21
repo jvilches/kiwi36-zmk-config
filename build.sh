@@ -38,12 +38,19 @@ build_shield_with_dongle() {
     cp "build/$build_name/zephyr/zmk.uf2" "$OUTPUT_DIR/${build_name}.uf2"
 }
 
-# Sync zmk-dongle-screen to the manifest revision before dongle builds.
+# Sync zmk-dongle-screen to the manifest revision before dongle builds,
+# then overlay local patches from dongle-patches/ on top.
 # Excluded from the initial "west update" in setup.sh — see setup.sh for context.
 ensure_dongle_module() {
     echo "--- Syncing dongle module ---"
     west config manifest.group-filter -- +dongle
     west update zmk-dongle-screen
+
+    echo "--- Applying local dongle-screen patches ---"
+    PATCHES_SRC="$CONFIG_PATH/../dongle-patches"
+    PATCHES_DST="$(west list zmk-dongle-screen -f '{abspath}')"
+    cp -r "$PATCHES_SRC/." "$PATCHES_DST/"
+    echo "    Patches applied from dongle-patches/ -> $PATCHES_DST"
 }
 
 # Build USB dongle with YADS screen
@@ -76,14 +83,14 @@ build_reset_dongle() {
     cp "build/reset_dongle/zephyr/zmk.uf2" "$OUTPUT_DIR/settings_reset_dongle.uf2"
 }
 
-build_shield "kiwi36" "left"
-build_shield "kiwi36" "right"
-build_shield_with_dongle "kiwi36" "left"
-build_shield_with_dongle "kiwi36" "right"
+#build_shield "kiwi36" "left"
+#build_shield "kiwi36" "right"
+#build_shield_with_dongle "kiwi36" "left"
+#build_shield_with_dongle "kiwi36" "right"
 ensure_dongle_module
 build_dongle_yads "kiwi36"
-build_reset
-build_reset_dongle
+#build_reset
+#build_reset_dongle
 
 echo ""
 echo "Done! Output files:"
