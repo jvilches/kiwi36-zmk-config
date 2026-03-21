@@ -177,6 +177,15 @@ config DONGLE_SCREEN_PERIPHERAL_STATUS_ACTIVE
       Shows a row of colored dots (one per split peripheral) indicating
       which peripherals are currently connected (green) or disconnected (dark gray).
 
+config DONGLE_SCREEN_MATRIX_RAIN_ACTIVE
+    bool "Matrix rain animation widget"
+    default y
+    help
+      Displays a Matrix-style falling-character animation in the gap between
+      the WPM number and the layer name. Each key press spawns up to 2 drops
+      in random columns. Drops finish their fall then go dark (no looping).
+      Head color matches the active layer accent; trail is 30% brightness.
+
 config DONGLE_SCREEN_AMBIENT_LIGHT
     bool "Enable automatic brightness via ambient light sensor"
     default n

@@ -36,6 +36,11 @@ static struct zmk_widget_mod_status mod_widget;
 static struct zmk_widget_peripheral_status peripheral_status_widget;
 #endif
 
+#if CONFIG_DONGLE_SCREEN_MATRIX_RAIN_ACTIVE
+#include "widgets/matrix_rain.h"
+static struct zmk_widget_matrix_rain matrix_rain_widget;
+#endif
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -88,6 +93,15 @@ lv_obj_t *zmk_display_status_screen()
     zmk_widget_peripheral_status_init(&peripheral_status_widget, screen);
     lv_obj_align(zmk_widget_peripheral_status_obj(&peripheral_status_widget),
                  LV_ALIGN_TOP_MID, -15, 20);
+#endif
+
+#if CONFIG_DONGLE_SCREEN_MATRIX_RAIN_ACTIVE
+    // Matrix rain: fills the gap between the WPM row (y≈45) and the layer name (y≈100).
+    // 8 columns × 12 px = 96 px wide, anchored to the left margin (x=20).
+    // Drops spawn on key press and fade out naturally; zone goes dark when idle.
+    zmk_widget_matrix_rain_init(&matrix_rain_widget, screen);
+    lv_obj_align(zmk_widget_matrix_rain_obj(&matrix_rain_widget),
+                 LV_ALIGN_TOP_LEFT, 20, 45);
 #endif
 
     return screen;
