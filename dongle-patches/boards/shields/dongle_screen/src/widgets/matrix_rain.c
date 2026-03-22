@@ -61,7 +61,6 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
-#include <zephyr/random/random.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -329,18 +328,18 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
                                 lv_obj_t *parent)
 {
     widget->obj = lv_obj_create(parent);
+    if (widget->obj == NULL) {
+        LOG_ERR("matrix_rain: OOM creating container");
+        return -ENOMEM;
+    }
     lv_obj_set_size(widget->obj, RAIN_COLS * RAIN_CHAR_W, RAIN_ZONE_H);
     lv_obj_set_style_bg_opa(widget->obj,       LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(widget->obj, 0,             LV_PART_MAIN);
     lv_obj_set_style_pad_all(widget->obj,      0,             LV_PART_MAIN);
     lv_obj_clear_flag(widget->obj, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Seed both PRNGs with hardware entropy (init runs in display work queue
-     * thread via initialize_display() → zmk_display_status_screen() — not ISR). */
-    rain_prng = sys_rand32_get();
-    if (rain_prng == 0u) rain_prng = 0xDEADBEEFu;
-    key_prng = sys_rand32_get();
-    if (key_prng == 0u) key_prng = 0xCAFEBABEu;
+    /* PRNGs use static seeds — no sys_rand32_get() calls to avoid potential
+     * blocking on hardware entropy during early display init. */
 
     /* Initialise colour state to layer 0.
      * col_last_color_idx[] is zero-initialised by BSS — already matches idx=0.
@@ -353,6 +352,10 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
         head_char[i][1] = '\0';
 
         head_lbl[i] = lv_label_create(widget->obj);
+        if (head_lbl[i] == NULL) {
+            LOG_ERR("matrix_rain: OOM at head_lbl[%d]", i);
+            return -ENOMEM;
+        }
         lv_obj_add_flag(head_lbl[i], LV_OBJ_FLAG_HIDDEN); /* hide first */
         lv_obj_set_style_text_color(head_lbl[i], init_color, 0);
         /* X is fixed for the lifetime of this column — set once here */
@@ -364,6 +367,10 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
             trail_char[i][t][1] = '\0';
 
             trail_lbl[i][t] = lv_label_create(widget->obj);
+            if (trail_lbl[i][t] == NULL) {
+                LOG_ERR("matrix_rain: OOM at trail_lbl[%d][%d]", i, t);
+                return -ENOMEM;
+            }
             lv_obj_add_flag(trail_lbl[i][t], LV_OBJ_FLAG_HIDDEN); /* hide first */
             lv_obj_set_style_text_color(trail_lbl[i][t], init_color, 0);
             lv_obj_set_style_text_opa(trail_lbl[i][t],   trail_opa[t], 0);
@@ -375,6 +382,7 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
         cols[i].active = false;
     }
 
+    LOG_DBG("matrix_rain: %d labels created OK", RAIN_COLS * (1 + RAIN_TRAIL_LEN));
     k_timer_start(&rain_timer, K_MSEC(RAIN_TICK_MS), K_MSEC(RAIN_TICK_MS));
 
     return 0;
