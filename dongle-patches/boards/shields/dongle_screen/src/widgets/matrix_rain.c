@@ -105,20 +105,25 @@ static const char rain_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#%&*=+?"
 #define RAIN_CHARS_LEN (sizeof(rain_chars) - 1u)
 
 /* ── PRNG (xorshift32 — no blocking, no heap) ────────────────────────── */
+/* Two independent states to avoid a data-race between the event-manager
+ * thread (key_listener) and the display work-queue thread (rain_work_cb).
+ * xorshift32(0) = 0 forever, so a torn read/write that zeroes the state
+ * would permanently break randomness — separate states prevent this. */
 
-static uint32_t prng_state = 0xDEADBEEFu;
+static uint32_t rain_prng = 0xDEADBEEFu;  /* display work-queue thread only */
+static uint32_t key_prng  = 0xCAFEBABEu;  /* event-manager thread only      */
 
-static uint32_t fast_rand(void)
+static inline uint32_t xorshift32(uint32_t *state)
 {
-    prng_state ^= prng_state << 13;
-    prng_state ^= prng_state >> 17;
-    prng_state ^= prng_state << 5;
-    return prng_state;
+    *state ^= *state << 13;
+    *state ^= *state >> 17;
+    *state ^= *state << 5;
+    return *state;
 }
 
 static char rand_char(void)
 {
-    return rain_chars[fast_rand() % RAIN_CHARS_LEN];
+    return rain_chars[xorshift32(&rain_prng) % RAIN_CHARS_LEN];
 }
 
 /* ── Per-column state ────────────────────────────────────────────────── */
@@ -170,7 +175,7 @@ static void spawn_col(int i)
     if (cols[i].active) return;
 
     cols[i].head_y   = 0;
-    cols[i].speed    = (uint8_t)(1u + fast_rand() % 3u);
+    cols[i].speed    = (uint8_t)(1u + xorshift32(&rain_prng) % 3u);
     cols[i].tick_mod = 0;
     cols[i].active   = true;
 
@@ -292,11 +297,11 @@ static int key_listener(const zmk_event_t *eh)
     if (!ev || !ev->state) return ZMK_EV_EVENT_BUBBLE;
 
     /* Mark up to 2 random columns for spawning.
-     * Uses fast_rand (xorshift32) — no blocking, no heap, ISR/thread safe.
+     * Uses key_prng (xorshift32) — no blocking, no heap, thread-safe (own state).
      * Zero LVGL calls; rain_work_cb (display_work_q) owns all rendering. */
     int marked = 0, attempts = 0;
     while (marked < 2 && attempts < 16) {
-        int col = (int)(fast_rand() % (uint32_t)RAIN_COLS);
+        int col = (int)(xorshift32(&key_prng) % (uint32_t)RAIN_COLS);
         if (!atomic_test_and_set_bit(spawn_pending, col)) {
             marked++;
         }
@@ -330,10 +335,12 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
     lv_obj_set_style_pad_all(widget->obj,      0,             LV_PART_MAIN);
     lv_obj_clear_flag(widget->obj, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Seed PRNG with hardware entropy (init runs in display work queue thread
-     * via initialize_display() → zmk_display_status_screen() — not ISR). */
-    prng_state = sys_rand32_get();
-    if (prng_state == 0u) prng_state = 0xDEADBEEFu;
+    /* Seed both PRNGs with hardware entropy (init runs in display work queue
+     * thread via initialize_display() → zmk_display_status_screen() — not ISR). */
+    rain_prng = sys_rand32_get();
+    if (rain_prng == 0u) rain_prng = 0xDEADBEEFu;
+    key_prng = sys_rand32_get();
+    if (key_prng == 0u) key_prng = 0xCAFEBABEu;
 
     /* Initialise colour state to layer 0.
      * col_last_color_idx[] is zero-initialised by BSS — already matches idx=0.
