@@ -62,13 +62,14 @@ lv_obj_t *zmk_display_status_screen()
     lv_obj_add_style(screen, &global_style, LV_PART_MAIN);
 
 #if CONFIG_DONGLE_SCREEN_MATRIX_RAIN_ACTIVE
-    // Matrix rain: full-screen background behind all other widgets.
-    // 23 columns × 12 px = 276 px wide, 155 px tall (y=0 → just above battery).
+    // Matrix rain: background behind all other widgets.
+    // 23 columns × 12 px = 276 px wide, 140 px tall.
+    // Starts just below WPM (y≈44) and ends just above battery (y≈184).
     // Created FIRST so it renders behind every subsequent widget (LVGL z-order =
     // child creation order; first child = bottom of stack).
     zmk_widget_matrix_rain_init(&matrix_rain_widget, screen);
     lv_obj_align(zmk_widget_matrix_rain_obj(&matrix_rain_widget),
-                 LV_ALIGN_TOP_LEFT, 2, 0);
+                 LV_ALIGN_TOP_LEFT, 2, 44);
 #endif
 
 #if CONFIG_DONGLE_SCREEN_OUTPUT_ACTIVE

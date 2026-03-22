@@ -22,8 +22,8 @@
  *
  * Layout
  * ──────
- * 23 columns × 12 px = 276 px wide, 155 px tall (y=0 → just above battery).
- * Positioned at TOP_LEFT (2, 0) — full-screen background behind all widgets.
+ * 23 columns × 12 px = 276 px wide, 140 px tall.
+ * Positioned at TOP_LEFT (2, 44) — just below WPM, ends above battery.
  * Created FIRST in zmk_display_status_screen() — LVGL z-order = child creation
  * order; first child = bottom of stack → all other widgets render on top.
  *
@@ -77,7 +77,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define RAIN_COLS      23    /* 23 × 12 px = 276 px wide                  */
 #define RAIN_CHAR_W    12    /* column pitch in px                         */
 #define RAIN_CHAR_H    20    /* line height in px (Montserrat 12 + spacing)*/
-#define RAIN_ZONE_H   155    /* widget height — stops just above battery   */
+#define RAIN_ZONE_H   140    /* widget height — from below WPM to above battery */
 #define RAIN_TRAIL_LEN  3    /* trail labels per column (23×4=92 objects)  */
 #define RAIN_TICK_MS   80    /* k_timer period in ms (~12 fps)             */
 
