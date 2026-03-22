@@ -152,23 +152,29 @@ static char trail_char[RAIN_COLS][RAIN_TRAIL_LEN][2];
  * (display work queue thread). */
 static ATOMIC_DEFINE(spawn_pending, RAIN_COLS);
 
-/* Current head colour — volatile: written by layer_listener (event-manager
- * thread), read by rain_work_handler (display work queue thread).
- * lv_color_t is uint16_t (RGB565); aligned 16-bit write is atomic on Cortex-M4.
- * volatile prevents compiler from caching the value across the work boundary. */
-static volatile lv_color_t cur_head_color;
+/* Current head colour — written by layer_listener (event-manager thread),
+ * read by rain_work_handler (display work queue thread).
+ * Snapshotted once per spawn_col call to avoid repeated volatile reads. */
+static lv_color_t cur_head_color;
 
-/* Per-column colour cache — avoids redundant lv_obj_set_style_text_color calls
- * (which modify LVGL local styles, triggering heap ops) when the layer accent
- * hasn't changed since the column last spawned.
- * Initialised to layer_colors[0] to match the color applied to all labels at init. */
-static lv_color_t col_last_color[RAIN_COLS];
+/* Current layer colour index — volatile uint8_t: written by layer_listener,
+ * read by rain_work_handler.  uint8_t write is atomic on Cortex-M4; volatile
+ * prevents the compiler from caching the value across the work boundary.
+ * Avoids comparing lv_color_t internals (struct layout is LVGL-version-specific). */
+static volatile uint8_t cur_layer_color_idx = 0;
+
+/* Per-column colour index cache — avoids redundant lv_obj_set_style_text_color
+ * calls (heap ops) when the layer accent hasn't changed since last spawn.
+ * Initialised to 0 to match layer_colors[0] applied to all labels at init. */
+static uint8_t col_last_color_idx[RAIN_COLS]; /* zero-initialised by BSS */
 
 /* ── Colour helper ───────────────────────────────────────────────────── */
 
 static void apply_layer_color(uint8_t layer)
 {
-    cur_head_color = layer_colors[layer % LAYER_COLORS_COUNT];
+    uint8_t idx    = layer % LAYER_COLORS_COUNT;
+    cur_layer_color_idx = idx;          /* volatile uint8_t — atomic write */
+    cur_head_color      = layer_colors[idx];
 }
 
 /* ── Column lifecycle (called only from rain_work_handler) ───────────── */
@@ -191,14 +197,18 @@ static void spawn_col(int i)
 
     /* Update label colours only when the layer accent changed since last spawn.
      * lv_obj_set_style_text_color modifies LVGL local styles (heap op) — skip
-     * when the colour is already correct to reduce LVGL work per spawn. */
-    lv_color_t color = cur_head_color; /* snapshot volatile once */
-    if (color.full != col_last_color[i].full) {
+     * when the colour is already correct to reduce LVGL work per spawn.
+     * Compare by index (uint8_t) rather than lv_color_t struct internals
+     * to stay portable across LVGL versions. */
+    uint8_t idx = cur_layer_color_idx; /* snapshot volatile uint8_t once */
+    if (idx != col_last_color_idx[i]) {
+        lv_color_t color = layer_colors[idx];
         lv_obj_set_style_text_color(head_lbl[i], color, 0);
         for (int t = 0; t < RAIN_TRAIL_LEN; t++) {
             lv_obj_set_style_text_color(trail_lbl[i][t], color, 0);
         }
-        col_last_color[i] = color;
+        col_last_color_idx[i] = idx;
+        cur_head_color = color; /* keep cur_head_color in sync */
     }
 
     /* Reset head to top; X was set at init and never changes */
@@ -343,13 +353,11 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
     prng_state = sys_rand32_get();
     if (prng_state == 0u) prng_state = 0xDEADBEEFu;
 
-    /* Initialise current colour and per-column colour cache to layer 0.
-     * All labels will receive this colour below, keeping cache consistent. */
+    /* Initialise colour state to layer 0.
+     * col_last_color_idx[] is zero-initialised by BSS — already matches idx=0.
+     * All labels receive layer_colors[0] below, keeping the cache consistent. */
     apply_layer_color(0);
-    lv_color_t init_color = cur_head_color;
-    for (int i = 0; i < RAIN_COLS; i++) {
-        col_last_color[i] = init_color;
-    }
+    lv_color_t init_color = layer_colors[0];
 
     for (int i = 0; i < RAIN_COLS; i++) {
         head_char[i][0] = 'A';
