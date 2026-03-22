@@ -61,6 +61,16 @@ lv_obj_t *zmk_display_status_screen()
     lv_style_set_text_line_space(&global_style, 1);
     lv_obj_add_style(screen, &global_style, LV_PART_MAIN);
 
+#if CONFIG_DONGLE_SCREEN_MATRIX_RAIN_ACTIVE
+    // Matrix rain: full-screen background behind all other widgets.
+    // 23 columns × 12 px = 276 px wide, 155 px tall (y=0 → just above battery).
+    // Created FIRST so it renders behind every subsequent widget (LVGL z-order =
+    // child creation order; first child = bottom of stack).
+    zmk_widget_matrix_rain_init(&matrix_rain_widget, screen);
+    lv_obj_align(zmk_widget_matrix_rain_obj(&matrix_rain_widget),
+                 LV_ALIGN_TOP_LEFT, 2, 0);
+#endif
+
 #if CONFIG_DONGLE_SCREEN_OUTPUT_ACTIVE
     zmk_widget_output_status_init(&output_status_widget, screen);
     lv_obj_align(zmk_widget_output_status_obj(&output_status_widget), LV_ALIGN_TOP_MID, 0, 10);
@@ -93,15 +103,6 @@ lv_obj_t *zmk_display_status_screen()
     zmk_widget_peripheral_status_init(&peripheral_status_widget, screen);
     lv_obj_align(zmk_widget_peripheral_status_obj(&peripheral_status_widget),
                  LV_ALIGN_TOP_MID, -15, 20);
-#endif
-
-#if CONFIG_DONGLE_SCREEN_MATRIX_RAIN_ACTIVE
-    // Matrix rain: fills the gap between the WPM row (y≈45) and the layer name (y≈100).
-    // 16 columns × 12 px = 192 px wide, anchored to the left margin (x=20).
-    // Drops spawn on key press and fade out naturally; zone goes dark when idle.
-    zmk_widget_matrix_rain_init(&matrix_rain_widget, screen);
-    lv_obj_align(zmk_widget_matrix_rain_obj(&matrix_rain_widget),
-                 LV_ALIGN_TOP_LEFT, 20, 45);
 #endif
 
     return screen;
