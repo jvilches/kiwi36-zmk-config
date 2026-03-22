@@ -8,10 +8,15 @@
  * Thread-safety model
  * ───────────────────
  * LVGL is not thread-safe.  All lv_* calls must come from a single context.
- * We follow the mod_status.c pattern: the k_timer callback (ISR) owns all
- * LVGL updates.  The key event listener (ZMK event-manager thread) only
- * writes to an atomic bitmask — zero LVGL calls.  The timer reads that mask
- * each tick and does the actual spawn + tick rendering.
+ *
+ * k_timer callbacks run in ISR context — they CANNOT call LVGL (lv_label_set_text
+ * internally calls lv_mem_alloc which uses a mutex; blocking in ISR hangs the system).
+ *
+ * Correct approach: use lv_timer_create().  LVGL timers fire inside lv_task_handler()
+ * which runs on the display thread — fully safe for all lv_* calls.
+ *
+ * Key event listener (ZMK event-manager thread) only writes to an atomic bitmask.
+ * The lv_timer callback (display thread) reads that mask each tick and spawns columns.
  *
  * Layout
  * ──────
@@ -22,7 +27,7 @@
  *
  * Behaviour
  * ─────────
- * • Key press  → sets bit(s) in spawn_pending; timer picks them up next tick.
+ * • Key press  → sets bit(s) in spawn_pending; lv_timer picks them up next tick.
  * • Active column → ignored on new keypress (previous drop finishes).
  * • No keypresses → active drops finish their fall, zone goes dark.
  * • Head color tracks the active layer accent (base = #00FF41 Matrix green).
@@ -49,7 +54,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define RAIN_CHAR_W   12     /* column pitch in px (≈ Montserrat 20 char) */
 #define RAIN_CHAR_H   20     /* line height in px  (Montserrat 20)        */
 #define RAIN_ZONE_H   55     /* widget height in px                       */
-#define RAIN_TICK_MS  80     /* timer period in ms (~12 fps)              */
+#define RAIN_TICK_MS  80     /* lv_timer period in ms (~12 fps)           */
 
 /* ── Layer colour palette (mirrors layer_status.c) ──────────────────── */
 
@@ -70,10 +75,10 @@ static const lv_color_t layer_colors[] = {
 static const char rain_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#%&*=+?";
 #define RAIN_CHARS_LEN (sizeof(rain_chars) - 1u)
 
-/* ── ISR-safe PRNG (xorshift32) ─────────────────────────────────────── */
+/* ── PRNG (xorshift32) ───────────────────────────────────────────────── */
 /*
- * sys_rand32_get() may block when backed by a hardware entropy source.
- * This lightweight PRNG is safe to call from the timer ISR.
+ * Called from the lv_timer callback (display thread) — not ISR.
+ * Still using xorshift32 for speed; seeded from hardware entropy at init.
  */
 static uint32_t prng_state = 0xDEADBEEFu;
 
@@ -103,12 +108,13 @@ static rain_col_t  cols[RAIN_COLS];
 static lv_obj_t   *head_lbl[RAIN_COLS];
 static lv_obj_t   *trail_lbl[RAIN_COLS];
 
-/* Atomic bitmask: bit i set = column i should spawn on next timer tick.
- * Written by key_listener (event thread), read+cleared by timer ISR. */
+/* Atomic bitmask: bit i set = column i should spawn on next lv_timer tick.
+ * Written by key_listener (event thread), read+cleared by lv_timer (display thread). */
 static ATOMIC_DEFINE(spawn_pending, RAIN_COLS);
 
 /* Current colours — written by layer_listener (event thread), read by
- * timer ISR.  lv_color_t is 2 bytes; 16-bit reads on Cortex-M are atomic. */
+ * lv_timer (display thread).  lv_color_t is 2 bytes; 16-bit reads on
+ * Cortex-M are atomic so no lock needed. */
 static lv_color_t cur_head_color;
 static lv_color_t cur_trail_color;
 
@@ -126,7 +132,7 @@ static void apply_layer_color(uint8_t layer)
     cur_trail_color = darken(cur_head_color);
 }
 
-/* ── Column lifecycle (called only from timer ISR) ───────────────────── */
+/* ── Column lifecycle (called only from lv_timer — display thread) ───── */
 
 static void spawn_col(int i)
 {
@@ -178,11 +184,9 @@ static void tick_col(int i)
     }
 }
 
-/* ── Timer — single owner of all LVGL calls ─────────────────────────── */
+/* ── lv_timer — runs in display thread, safe for all LVGL calls ───────── */
 
-static struct k_timer rain_timer;
-
-static void rain_timer_cb(struct k_timer *timer)
+static void rain_lv_timer_cb(lv_timer_t *timer)
 {
     ARG_UNUSED(timer);
 
@@ -207,10 +211,9 @@ static int key_listener(const zmk_event_t *eh)
     if (!ev || !ev->state) return ZMK_EV_EVENT_BUBBLE; /* key-down only */
 
     /*
-     * Mark up to 2 random columns to spawn on the next timer tick.
-     * NO LVGL calls here — the timer ISR owns all rendering.
-     * atomic_test_and_set_bit returns the previous value; we only count
-     * a column if the bit was previously clear (not already pending).
+     * Mark up to 2 random columns to spawn on the next lv_timer tick.
+     * NO LVGL calls here — the lv_timer (display thread) owns all rendering.
+     * sys_rand32_get() is safe here (event thread, not ISR).
      */
     int marked = 0, attempts = 0;
     while (marked < 2 && attempts < 16) {
@@ -248,7 +251,7 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
     lv_obj_set_style_pad_all(widget->obj,      0,             LV_PART_MAIN);
     lv_obj_clear_flag(widget->obj, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Seed PRNG with a value from the hardware entropy source */
+    /* Seed PRNG from hardware entropy (safe here — init runs in display thread) */
     prng_state = sys_rand32_get();
     if (prng_state == 0) prng_state = 0xDEADBEEFu; /* xorshift needs non-zero */
 
@@ -270,8 +273,8 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
         cols[i].active = false;
     }
 
-    k_timer_init(&rain_timer, rain_timer_cb, NULL);
-    k_timer_start(&rain_timer, K_MSEC(RAIN_TICK_MS), K_MSEC(RAIN_TICK_MS));
+    /* lv_timer runs inside lv_task_handler() (display thread) — safe for LVGL */
+    lv_timer_create(rain_lv_timer_cb, RAIN_TICK_MS, NULL);
 
     return 0;
 }
