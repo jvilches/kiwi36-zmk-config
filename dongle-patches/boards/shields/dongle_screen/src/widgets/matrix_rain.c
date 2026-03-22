@@ -7,24 +7,16 @@
  *
  * Thread-safety model
  * ───────────────────
- * ZMK's display architecture (display/main.c):
- *   display_timer (k_timer ISR) → k_work_submit → display_work_q thread
- *                                                  └── lv_task_handler()
- *
- * We follow the SAME pattern:
- *   rain_timer (k_timer ISR) → k_work_submit → display_work_q thread
- *                                               └── rain_work_handler() [all lv_*]
- *
- * rain_work_handler and lv_task_handler run on the SAME thread → serialised by
- * the work queue → LVGL is always accessed from one thread → no data races.
+ * k_timer callback (rain_timer_cb) is the single owner of all LVGL calls,
+ * following the same pattern as mod_status.c in this module.
  *
  * key_listener (event-manager thread):
  *   Only writes atomic bits in spawn_pending — zero LVGL calls.
  *
  * layer_listener (event-manager thread):
- *   Only writes volatile cur_head_color — zero LVGL calls.
- *   uint16_t (RGB565) aligned write is atomic on Cortex-M4; volatile prevents
- *   compiler from caching the value across the work-handler call boundary.
+ *   Only writes volatile cur_layer_color_idx / cur_head_color — zero LVGL calls.
+ *   uint8_t/uint16_t aligned writes are atomic on Cortex-M4; volatile prevents
+ *   compiler from caching values across the timer callback boundary.
  *
  * Layout
  * ──────
@@ -71,7 +63,6 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
-#include <zmk/display.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/keycode_state_changed.h>
 #include <zmk/events/layer_state_changed.h>
@@ -85,11 +76,11 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define RAIN_CHAR_W    12    /* column pitch in px                         */
 #define RAIN_CHAR_H    20    /* line height in px (Montserrat 12 + spacing)*/
 #define RAIN_ZONE_H   155    /* widget height — stops just above battery   */
-#define RAIN_TRAIL_LEN  5    /* trail labels per column                    */
+#define RAIN_TRAIL_LEN  3    /* trail labels per column (23×4=92 objects)  */
 #define RAIN_TICK_MS   80    /* k_timer period in ms (~12 fps)             */
 
 /* Opacity for each trail level; index 0 = closest to head */
-static const lv_opa_t trail_opa[RAIN_TRAIL_LEN] = {180, 100, 51, 20, 8};
+static const lv_opa_t trail_opa[RAIN_TRAIL_LEN] = {180, 80, 20};
 
 /* ── Layer colour palette (mirrors layer_status.c) ──────────────────── */
 
@@ -147,18 +138,17 @@ static lv_obj_t   *trail_lbl[RAIN_COLS][RAIN_TRAIL_LEN];
 static char head_char[RAIN_COLS][2];
 static char trail_char[RAIN_COLS][RAIN_TRAIL_LEN][2];
 
-/* Atomic bitmask: bit i = column i should spawn on the next work handler run.
- * Written by key_listener (event thread), read+cleared by rain_work_handler
- * (display work queue thread). */
+/* Atomic bitmask: bit i = column i should spawn on the next timer tick.
+ * Written by key_listener (event thread), read+cleared by rain_timer_cb. */
 static ATOMIC_DEFINE(spawn_pending, RAIN_COLS);
 
 /* Current head colour — written by layer_listener (event-manager thread),
- * read by rain_work_handler (display work queue thread).
+ * read by rain_timer_cb (display work queue thread).
  * Snapshotted once per spawn_col call to avoid repeated volatile reads. */
 static lv_color_t cur_head_color;
 
 /* Current layer colour index — volatile uint8_t: written by layer_listener,
- * read by rain_work_handler.  uint8_t write is atomic on Cortex-M4; volatile
+ * read by rain_timer_cb.  uint8_t write is atomic on Cortex-M4; volatile
  * prevents the compiler from caching the value across the work boundary.
  * Avoids comparing lv_color_t internals (struct layout is LVGL-version-specific). */
 static volatile uint8_t cur_layer_color_idx = 0;
@@ -177,7 +167,7 @@ static void apply_layer_color(uint8_t layer)
     cur_head_color      = layer_colors[idx];
 }
 
-/* ── Column lifecycle (called only from rain_work_handler) ───────────── */
+/* ── Column lifecycle (called only from k_timer callback) ────────────── */
 
 static void spawn_col(int i)
 {
@@ -269,11 +259,11 @@ static void tick_col(int i)
     }
 }
 
-/* ── Work handler — runs on display work queue (same thread as lv_task_handler) */
+/* ── k_timer callback — same pattern as mod_status.c ────────────────── */
 
-static void rain_work_handler(struct k_work *work)
+static void rain_timer_cb(struct k_timer *timer)
 {
-    ARG_UNUSED(work);
+    ARG_UNUSED(timer);
 
     /* Spawn columns requested by key events (atomic read + clear) */
     for (int i = 0; i < RAIN_COLS; i++) {
@@ -288,18 +278,6 @@ static void rain_work_handler(struct k_work *work)
     }
 }
 
-K_WORK_DEFINE(rain_work, rain_work_handler);
-
-/* ── k_timer — ISR context, submits work only, zero LVGL calls ────────── */
-
-static void rain_timer_cb(struct k_timer *timer)
-{
-    ARG_UNUSED(timer);
-    /* k_work_submit_to_queue is safe from ISR.  If rain_work is already
-     * queued, Zephyr ignores the duplicate submit — no double-execution. */
-    k_work_submit_to_queue(zmk_display_work_q(), &rain_work);
-}
-
 static K_TIMER_DEFINE(rain_timer, rain_timer_cb, NULL);
 
 /* ── Event listeners ─────────────────────────────────────────────────── */
@@ -311,7 +289,7 @@ static int key_listener(const zmk_event_t *eh)
 
     /* Mark up to 2 random columns for spawning.
      * Uses fast_rand (xorshift32) — no blocking, no heap, ISR/thread safe.
-     * Zero LVGL calls; rain_work_handler owns all rendering. */
+     * Zero LVGL calls; rain_timer_cb (k_timer) owns all rendering. */
     int marked = 0, attempts = 0;
     while (marked < 2 && attempts < 16) {
         int col = (int)(fast_rand() % (uint32_t)RAIN_COLS);
