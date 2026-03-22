@@ -26,15 +26,15 @@
  * order; first child = bottom of stack → all other widgets render on top.
  *
  * Each column: 1 head label + RAIN_TRAIL_LEN trail labels.
- * Total: 23 × 6 = 138 lv_label objects.
+ * Total: 23 × 4 = 92 lv_label objects.
  * lv_label_set_text_static with static char arrays → zero heap pressure
  * during animation.  Trail X coordinates fixed at init → lv_obj_set_y only
  * in tick loop (no redundant X updates).
  *
  * Trail
  * ─────
- * 5 trail labels per column, each RAIN_CHAR_H below the previous.
- * Opacity decays: 180 → 100 → 51 → 20 → 8.
+ * 3 trail labels per column, each RAIN_CHAR_H below the previous.
+ * Opacity decays: 180 → 80 → 20.
  * Every 3 ticks: trail[n] ← trail[n-1], trail[0] ← old head char,
  * head gets a new random char → cascading organic flicker effect.
  * lv_label_set_text_static always calls lv_obj_invalidate (confirmed in
@@ -43,14 +43,14 @@
  * Colour cache
  * ────────────
  * lv_obj_set_style_text_color modifies LVGL local styles (heap op).  Each
- * column caches the last colour it applied; spawn_col skips the style call
- * when the layer accent hasn't changed since the column last spawned.
- * At init all labels receive layer_colors[0], col_last_color[i] is set to
- * the same value → first spawn of each column is always correct.
+ * column tracks the last colour index applied; spawn_col skips the style
+ * call when the layer accent hasn't changed since the column last spawned.
+ * At init all labels receive layer_colors[0], col_last_color_idx[] is 0
+ * (BSS) → first spawn of each column is always correct.
  *
  * Behaviour
  * ─────────
- * • Key press  → sets bit(s) in spawn_pending; work handler picks them up.
+ * • Key press  → sets bit(s) in spawn_pending; k_timer picks them up.
  * • Active col → new keypress ignored (previous drop finishes naturally).
  * • No keypresses → active drops finish their fall; zone goes dark.
  * • Head color tracks the active layer accent (base = #00FF41 Matrix green).
@@ -142,9 +142,9 @@ static char trail_char[RAIN_COLS][RAIN_TRAIL_LEN][2];
  * Written by key_listener (event thread), read+cleared by rain_timer_cb. */
 static ATOMIC_DEFINE(spawn_pending, RAIN_COLS);
 
-/* Current head colour — written by layer_listener (event-manager thread),
- * read by rain_timer_cb (display work queue thread).
- * Snapshotted once per spawn_col call to avoid repeated volatile reads. */
+/* Current head colour — kept in sync with cur_layer_color_idx by
+ * apply_layer_color() and by spawn_col() when a colour change is detected.
+ * Read only from rain_timer_cb; written from layer_listener and spawn_col. */
 static lv_color_t cur_head_color;
 
 /* Current layer colour index — volatile uint8_t: written by layer_listener,
@@ -326,8 +326,8 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
     lv_obj_set_style_pad_all(widget->obj,      0,             LV_PART_MAIN);
     lv_obj_clear_flag(widget->obj, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Seed PRNG with hardware entropy (init runs in display work queue thread,
-     * not ISR — sys_rand32_get is safe here). */
+    /* Seed PRNG with hardware entropy (init runs in display work queue thread
+     * via initialize_display() → zmk_display_status_screen() — not ISR). */
     prng_state = sys_rand32_get();
     if (prng_state == 0u) prng_state = 0xDEADBEEFu;
 
