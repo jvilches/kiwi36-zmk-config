@@ -7,8 +7,10 @@
  *
  * Thread-safety model
  * ───────────────────
- * k_timer callback (rain_timer_cb) is the single owner of all LVGL calls,
- * following the same pattern as mod_status.c in this module.
+ * k_timer ISR  → k_work_submit_to_queue(zmk_display_work_q(), &rain_work)
+ * rain_work_cb → runs on the display work queue thread (same thread as
+ *                lv_task_handler), so all LVGL calls are serialised.
+ * This is the canonical ZMK pattern (see display_timer in main.c).
  *
  * key_listener (event-manager thread):
  *   Only writes atomic bits in spawn_pending — zero LVGL calls.
@@ -16,7 +18,7 @@
  * layer_listener (event-manager thread):
  *   Only writes volatile cur_layer_color_idx — zero LVGL calls.
  *   uint8_t aligned writes are atomic on Cortex-M4; volatile prevents
- *   compiler from caching values across the timer callback boundary.
+ *   compiler from caching values across the work callback boundary.
  *
  * Layout
  * ──────
@@ -50,7 +52,7 @@
  *
  * Behaviour
  * ─────────
- * • Key press  → sets bit(s) in spawn_pending; k_timer picks them up.
+ * • Key press  → sets bit(s) in spawn_pending; rain_work_cb picks them up.
  * • Active col → new keypress ignored (previous drop finishes naturally).
  * • No keypresses → active drops finish their fall; zone goes dark.
  * • Head color tracks the active layer accent (base = #00FF41 Matrix green).
@@ -63,6 +65,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
+#include <zmk/display.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/keycode_state_changed.h>
 #include <zmk/events/layer_state_changed.h>
@@ -139,11 +142,11 @@ static char head_char[RAIN_COLS][2];
 static char trail_char[RAIN_COLS][RAIN_TRAIL_LEN][2];
 
 /* Atomic bitmask: bit i = column i should spawn on the next timer tick.
- * Written by key_listener (event thread), read+cleared by rain_timer_cb. */
+ * Written by key_listener (event thread), read+cleared by rain_work_cb. */
 static ATOMIC_DEFINE(spawn_pending, RAIN_COLS);
 
 /* Current layer colour index — volatile uint8_t: written by layer_listener,
- * read by rain_timer_cb.  uint8_t write is atomic on Cortex-M4; volatile
+ * read by rain_work_cb.  uint8_t write is atomic on Cortex-M4; volatile
  * prevents the compiler from caching the value across the work boundary.
  * Avoids comparing lv_color_t internals (struct layout is LVGL-version-specific). */
 static volatile uint8_t cur_layer_color_idx = 0;
@@ -160,7 +163,7 @@ static void apply_layer_color(uint8_t layer)
     cur_layer_color_idx = layer % LAYER_COLORS_COUNT; /* volatile uint8_t — atomic write */
 }
 
-/* ── Column lifecycle (called only from k_timer callback) ────────────── */
+/* ── Column lifecycle (called only from rain_work_cb on display_work_q) ─ */
 
 static void spawn_col(int i)
 {
@@ -251,11 +254,11 @@ static void tick_col(int i)
     }
 }
 
-/* ── k_timer callback — same pattern as mod_status.c ────────────────── */
+/* ── Timer → work-queue pattern (same as ZMK display_timer in main.c) ── */
 
-static void rain_timer_cb(struct k_timer *timer)
+static void rain_work_cb(struct k_work *work)
 {
-    ARG_UNUSED(timer);
+    ARG_UNUSED(work);
 
     /* Spawn columns requested by key events (atomic read + clear) */
     for (int i = 0; i < RAIN_COLS; i++) {
@@ -270,6 +273,15 @@ static void rain_timer_cb(struct k_timer *timer)
     }
 }
 
+static K_WORK_DEFINE(rain_work, rain_work_cb);
+
+static void rain_timer_cb(struct k_timer *timer)
+{
+    ARG_UNUSED(timer);
+    /* ISR context — only submit work, zero LVGL calls */
+    k_work_submit_to_queue(zmk_display_work_q(), &rain_work);
+}
+
 static K_TIMER_DEFINE(rain_timer, rain_timer_cb, NULL);
 
 /* ── Event listeners ─────────────────────────────────────────────────── */
@@ -281,7 +293,7 @@ static int key_listener(const zmk_event_t *eh)
 
     /* Mark up to 2 random columns for spawning.
      * Uses fast_rand (xorshift32) — no blocking, no heap, ISR/thread safe.
-     * Zero LVGL calls; rain_timer_cb (k_timer) owns all rendering. */
+     * Zero LVGL calls; rain_work_cb (display_work_q) owns all rendering. */
     int marked = 0, attempts = 0;
     while (marked < 2 && attempts < 16) {
         int col = (int)(fast_rand() % (uint32_t)RAIN_COLS);
