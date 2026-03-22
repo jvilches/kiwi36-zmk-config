@@ -14,8 +14,8 @@
  *   Only writes atomic bits in spawn_pending — zero LVGL calls.
  *
  * layer_listener (event-manager thread):
- *   Only writes volatile cur_layer_color_idx / cur_head_color — zero LVGL calls.
- *   uint8_t/uint16_t aligned writes are atomic on Cortex-M4; volatile prevents
+ *   Only writes volatile cur_layer_color_idx — zero LVGL calls.
+ *   uint8_t aligned writes are atomic on Cortex-M4; volatile prevents
  *   compiler from caching values across the timer callback boundary.
  *
  * Layout
@@ -142,11 +142,6 @@ static char trail_char[RAIN_COLS][RAIN_TRAIL_LEN][2];
  * Written by key_listener (event thread), read+cleared by rain_timer_cb. */
 static ATOMIC_DEFINE(spawn_pending, RAIN_COLS);
 
-/* Current head colour — kept in sync with cur_layer_color_idx by
- * apply_layer_color() and by spawn_col() when a colour change is detected.
- * Read only from rain_timer_cb; written from layer_listener and spawn_col. */
-static lv_color_t cur_head_color;
-
 /* Current layer colour index — volatile uint8_t: written by layer_listener,
  * read by rain_timer_cb.  uint8_t write is atomic on Cortex-M4; volatile
  * prevents the compiler from caching the value across the work boundary.
@@ -162,9 +157,7 @@ static uint8_t col_last_color_idx[RAIN_COLS]; /* zero-initialised by BSS */
 
 static void apply_layer_color(uint8_t layer)
 {
-    uint8_t idx    = layer % LAYER_COLORS_COUNT;
-    cur_layer_color_idx = idx;          /* volatile uint8_t — atomic write */
-    cur_head_color      = layer_colors[idx];
+    cur_layer_color_idx = layer % LAYER_COLORS_COUNT; /* volatile uint8_t — atomic write */
 }
 
 /* ── Column lifecycle (called only from k_timer callback) ────────────── */
@@ -198,7 +191,6 @@ static void spawn_col(int i)
             lv_obj_set_style_text_color(trail_lbl[i][t], color, 0);
         }
         col_last_color_idx[i] = idx;
-        cur_head_color = color; /* keep cur_head_color in sync */
     }
 
     /* Reset head to top; X was set at init and never changes */
