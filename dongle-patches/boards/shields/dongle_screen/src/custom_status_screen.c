@@ -97,7 +97,7 @@ lv_obj_t *zmk_display_status_screen()
 
 #if CONFIG_DONGLE_SCREEN_MATRIX_RAIN_ACTIVE
     // Matrix rain: fills the gap between the WPM row (y≈45) and the layer name (y≈100).
-    // 8 columns × 12 px = 96 px wide, anchored to the left margin (x=20).
+    // 16 columns × 12 px = 192 px wide, anchored to the left margin (x=20).
     // Drops spawn on key press and fade out naturally; zone goes dark when idle.
     zmk_widget_matrix_rain_init(&matrix_rain_widget, screen);
     lv_obj_align(zmk_widget_matrix_rain_obj(&matrix_rain_widget),

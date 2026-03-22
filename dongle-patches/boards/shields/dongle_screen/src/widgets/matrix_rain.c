@@ -20,10 +20,12 @@
  *
  * Layout
  * ──────
- * 8 columns × 12 px = 96 px wide, 55 px tall.
+ * 16 columns × 12 px = 192 px wide, 55 px tall.
  * Positioned at TOP_LEFT (20, 45) — fills the gap between the WPM row and
- * the layer name.  Each column has one head label and one trail label (16
+ * the layer name.  Each column has one head label and one trail label (32
  * lv_label objects total; no canvas buffer to avoid exhausting the pool).
+ * Labels use lv_label_set_text_static with per-column static char arrays to
+ * avoid lv_mem_alloc pressure and prevent heap-fragmentation display corruption.
  *
  * Behaviour
  * ─────────
@@ -50,7 +52,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 /* ── Geometry ────────────────────────────────────────────────────────── */
 
-#define RAIN_COLS      8     /* number of columns                         */
+#define RAIN_COLS     16     /* number of columns (16 × 12 px = 192 px)   */
 #define RAIN_CHAR_W   12     /* column pitch in px (≈ Montserrat 20 char) */
 #define RAIN_CHAR_H   20     /* line height in px  (Montserrat 20)        */
 #define RAIN_ZONE_H   55     /* widget height in px                       */
@@ -108,6 +110,11 @@ static rain_col_t  cols[RAIN_COLS];
 static lv_obj_t   *head_lbl[RAIN_COLS];
 static lv_obj_t   *trail_lbl[RAIN_COLS];
 
+/* Static char buffers for lv_label_set_text_static — avoids lv_mem_alloc
+ * on every text update, preventing heap fragmentation and display corruption. */
+static char head_char[RAIN_COLS][2];
+static char trail_char[RAIN_COLS][2];
+
 /* Atomic bitmask: bit i set = column i should spawn on next lv_timer tick.
  * Written by key_listener (event thread), read+cleared by lv_timer (display thread). */
 static ATOMIC_DEFINE(spawn_pending, RAIN_COLS);
@@ -143,12 +150,15 @@ static void spawn_col(int i)
     cols[i].tick_mod = 0;
     cols[i].active   = true;
 
-    char buf[2] = { rand_char(), '\0' };
+    head_char[i][0]  = rand_char();
+    head_char[i][1]  = '\0';
+    trail_char[i][0] = head_char[i][0];
+    trail_char[i][1] = '\0';
 
     lv_obj_set_style_text_color(head_lbl[i],  cur_head_color,  0);
     lv_obj_set_style_text_color(trail_lbl[i], cur_trail_color, 0);
-    lv_label_set_text(head_lbl[i],  buf);
-    lv_label_set_text(trail_lbl[i], buf);
+    lv_label_set_text_static(head_lbl[i],  head_char[i]);
+    lv_label_set_text_static(trail_lbl[i], trail_char[i]);
 
     lv_obj_set_pos(head_lbl[i], i * RAIN_CHAR_W, 0);
     lv_obj_clear_flag(head_lbl[i],  LV_OBJ_FLAG_HIDDEN);
@@ -165,8 +175,8 @@ static void tick_col(int i)
     /* Randomise head character every 3 ticks */
     if (++cols[i].tick_mod >= 3u) {
         cols[i].tick_mod = 0;
-        char buf[2] = { rand_char(), '\0' };
-        lv_label_set_text(head_lbl[i], buf);
+        head_char[i][0] = rand_char();
+        lv_label_set_text_static(head_lbl[i], head_char[i]);
     }
 
     /* Show trail once it enters the zone (one char-height behind head) */
@@ -258,16 +268,21 @@ int zmk_widget_matrix_rain_init(struct zmk_widget_matrix_rain *widget,
     apply_layer_color(0); /* start with base-layer colour */
 
     for (int i = 0; i < RAIN_COLS; i++) {
+        head_char[i][0]  = 'A';
+        head_char[i][1]  = '\0';
+        trail_char[i][0] = 'A';
+        trail_char[i][1] = '\0';
+
         head_lbl[i] = lv_label_create(widget->obj);
         lv_obj_set_style_text_color(head_lbl[i], cur_head_color, 0);
         lv_obj_set_pos(head_lbl[i], i * RAIN_CHAR_W, 0);
-        lv_label_set_text(head_lbl[i], "A");
+        lv_label_set_text_static(head_lbl[i], head_char[i]);
         lv_obj_add_flag(head_lbl[i], LV_OBJ_FLAG_HIDDEN);
 
         trail_lbl[i] = lv_label_create(widget->obj);
         lv_obj_set_style_text_color(trail_lbl[i], cur_trail_color, 0);
         lv_obj_set_pos(trail_lbl[i], i * RAIN_CHAR_W, 0);
-        lv_label_set_text(trail_lbl[i], "A");
+        lv_label_set_text_static(trail_lbl[i], trail_char[i]);
         lv_obj_add_flag(trail_lbl[i], LV_OBJ_FLAG_HIDDEN);
 
         cols[i].active = false;
